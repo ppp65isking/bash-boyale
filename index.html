@@ -17,8 +17,13 @@
       <button id="btn-deck" class="btn">Deck Builder</button>
       <button id="btn-chests" class="btn">Chests <span id="chest-count"></span></button>
     </div>
-    <p class="foot">PR 3 — 15 cards · 3 towers · Drawn characters · Home · Arena · AI opponent · Deck builder · Chests</p>
+    <p class="foot">PR 4 — 23 cards · Levels · Chests · Daily wins · Home · Arena · AI opponent · Deck builder · Chests</p>
     <p class="foot" id="collection-summary"></p>
+    <p class="foot" id="tower-summary"></p>
+    <div class="daily-box">
+      <h3>Daily Wins</h3>
+      <p id="daily-info"></p>
+    </div>
   </section>
 
   <!-- DECK BUILDER -->
@@ -27,6 +32,7 @@
     <p>Pick exactly 8 cards. Your deck is saved automatically.</p>
     <div id="deck-slots" class="deck-slots"></div>
     <p id="deck-status"></p>
+    <p id="tower-info"></p>
     <div id="card-grid" class="card-grid"></div>
     <button id="btn-deck-back" class="btn">Back</button>
   </section>
@@ -36,6 +42,7 @@
     <h2>Chests</h2>
     <p>Win battles to earn chests. Open them for cards and Crystils.</p>
     <p>Crystils: <span id="crystal-count">0</span></p>
+    <p>Wild cards: <span id="wild-count"></span></p>
     <div id="chest-list" class="chest-list"></div>
     <div id="chest-rewards" class="rewards"></div>
     <button id="btn-chests-back" class="btn">Back</button>
@@ -44,9 +51,9 @@
   <!-- BATTLE -->
   <section id="screen-battle" class="screen hidden">
     <div class="battle-top">
-      <div class="towerbar"><span>AI King</span> <span id="ai-towers-left"></span><div class="hpbar"><div id="ai-tower-hp" class="hpfill"></div></div></div>
+      <div class="towerbar"><span id="ai-king-label">AI King</span> <span id="ai-towers-left"></span><div class="hpbar"><div id="ai-tower-hp" class="hpfill"></div></div></div>
       <div id="timer" class="timer">2:00</div>
-      <div class="towerbar"><span>Your King</span> <span id="player-towers-left"></span><div class="hpbar"><div id="player-tower-hp" class="hpfill good"></div></div></div>
+      <div class="towerbar"><span id="player-king-label">Your King</span> <span id="player-towers-left"></span><div class="hpbar"><div id="player-tower-hp" class="hpfill good"></div></div></div>
     </div>
     <canvas id="arena" width="400" height="600"></canvas>
     <div id="battle-msg" class="battle-msg">Pick a card, then tap your side of the arena!</div>

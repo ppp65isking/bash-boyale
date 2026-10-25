@@ -44,3 +44,9 @@ h2 { color: #ffd34f; }
 .battle-end { text-align: center; background: #2d2350; border-radius: 12px; padding: 16px; margin-top: 12px; }
 
 .btn, .card, .chest { touch-action: manipulation; }
+
+.daily-box { background: #2d2350; border-radius: 12px; padding: 12px; margin: 16px 0; }
+.daily-box h3 { margin: 0 0 6px; color: #ffd34f; }
+.daily-box p { margin: 0; font-size: 13px; color: #cfc4ff; }
+.mini-btn { background: #7c5cff; color: #fff; border: none; border-radius: 8px; padding: 6px 8px; font-size: 11px; cursor: pointer; margin-top: 6px; }
+.mini-btn:disabled { background: #555; cursor: not-allowed; }

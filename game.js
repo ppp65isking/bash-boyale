@@ -8,6 +8,42 @@
   var W = 400, H = 600, BRIDGE_Y = 300;
   var SPEEDS = { slow: 45, norm: 65, med: 80, fast: 100, vfast: 130 };
   var TOWER = { hp: 1800, dmg: 100, hitSpeed: 1.5, range: 5 }; // notes p.15, L1
+  // Tower levels (notes p.15): HP / DMG per level, hit speed 1.5s always.
+  var TOWER_LEVELS = [
+    { hp: 1800, dmg: 100 }, { hp: 1950, dmg: 125 }, { hp: 2100, dmg: 140 }, { hp: 2300, dmg: 180 },
+    { hp: 2450, dmg: 220 }, { hp: 2500, dmg: 250 }, { hp: 2700, dmg: 300 }, { hp: 2950, dmg: 340 },
+    { hp: 3200, dmg: 360 }, { hp: 3400, dmg: 375 }, { hp: 3500, dmg: 395 }, { hp: 3650, dmg: 410 },
+    { hp: 3720, dmg: 420 }, { hp: 3900, dmg: 425 }, { hp: 4100, dmg: 430 }, { hp: 4400, dmg: 435 },
+    { hp: 4550, dmg: 445 }, { hp: 4800, dmg: 450 }, { hp: 5250, dmg: 470 }, { hp: 5500, dmg: 485 },
+    { hp: 5600, dmg: 500 }
+  ];
+  // Notes p.15: "MAIN Mortar DS +2000 HP every lvl" — read as: at every level
+  // the king (main) tower gets +2000 HP over the table value. Side towers use
+  // the table as-is. (The per-level reading, +2000 x level, would dwarf the
+  // whole table and contradict it, so it is not used.)
+  var KING_HP_BONUS = 2000;
+  // Average card level required per tower level (notes p.17). L1 is free
+  // ("needs one card at L1"); L2 = 1.25 is interpolated between L1 (1.0) and
+  // L3 (1.5) — the notes' "L2 ... avg level to L2" line cannot mean avg 2.0,
+  // which would exceed L3/L4/L5's requirements and break the ordering.
+  var TOWER_AVG_REQ = [1, 1.25, 1.5, 1.75, 2, 2.3, 2.6, 2.9, 3.2, 3.5, 3.8, 4.3, 5, 5.5, 6.2, 6.8, 7.5, 8, 8.5, 9.8, 11];
+  // Card stat scaling per level (notes give no per-level stat table, so this
+  // is a documented flat curve): +4% HP and damage per level above 1.
+  function lvlScale(lvl) { return Math.pow(1.04, (lvl || 1) - 1); }
+  // Upgrade costs (notes p.14, exact): cards + Crystils per step.
+  var UPGRADE_COSTS = [
+    { cards: 15, crs: 1000 }, { cards: 25, crs: 1250 }, { cards: 50, crs: 1500 },
+    { cards: 75, crs: 2000 }, { cards: 100, crs: 2500 }, { cards: 125, crs: 3000 },
+    { cards: 140, crs: 3500 }, { cards: 160, crs: 4000 }, { cards: 180, crs: 4500 },
+    { cards: 195, crs: 4750 }, { cards: 200, crs: 4900 }, { cards: 220, crs: 5100 },
+    { cards: 240, crs: 5500 }, { cards: 260, crs: 6000 }, { cards: 275, crs: 6200 },
+    { cards: 290, crs: 6500 }, { cards: 310, crs: 7000 }, { cards: 325, crs: 7500 },
+    { cards: 330, crs: 8000 }, { cards: 350, crs: 8500 }
+  ];
+  var MAX_CARD_LEVEL = 21;
+  // Rare pool for chest "Rare Cards" slots (no per-card rarity table exists in
+  // the notes, so this is a documented rule): elixir cost 6 or more.
+  function isRareCard(c) { return c.elixir >= 6; }
   var ELIXIR_MAX = 10, ELIXIR_START = 5, ELIXIR_REGEN = 2.8; // seconds per 1
   var MATCH_TIME = 120;
 
@@ -27,7 +63,15 @@
     { id: 'waaflee', name: 'Waaflee', elixir: 9, type: 'troop', hp: 9400, dmg: 980, hitSpeed: 2.6, range: 1, speed: 'fast', count: 1, splitAt: 0.25 },
     { id: 'windblower', name: 'Windblower', elixir: 9, type: 'building', hp: 1400, pushTiles: 1, pushEvery: 1.2, decay: 70, range: 3, count: 1 }, // decay + range CHOSEN (notes: "Decaying HP", no rate/range)
     { id: 'back_to_begin', name: 'Back To Begin', elixir: 10, type: 'troop', hp: 4720, dmg: 783, hitSpeed: 1.9, range: 1, speed: 'fast', count: 1, rewindAt: 0.20 },
-    { id: 'no_skill', name: 'No-skill', elixir: 11, type: 'building', hp: 9900, dmg: 45, hitSpeed: 0.9, range: 9, pierceEvery: 3, pierceBonus: 16, count: 1 }
+    { id: 'no_skill', name: 'No-skill', elixir: 11, type: 'building', hp: 9900, dmg: 45, hitSpeed: 0.9, range: 9, pierceEvery: 3, pierceBonus: 16, count: 1 },
+    { id: 'the_tank', name: 'The Tank', elixir: 10, type: 'troop', hp: 8920, dmg: 200, hitSpeed: 1.8, range: 1, speed: 'slow', count: 1 }, // speed CHOSEN (notes: no speed)
+    { id: 'dagger_dip', name: 'Dagger Dip', elixir: 4, type: 'spell', radius: 3, poison: 100, poisonTicks: 3 }, // radius CHOSEN (notes: no radius)
+    { id: 'run_n_xplode', name: 'Run N Xplode', elixir: 2, type: 'troop', hp: 1600, dmg: 490, hitSpeed: 1, range: 1, speed: 'vfast', count: 2, suicide: true },
+    { id: 'overclocker', name: 'Overclocker', elixir: 8, type: 'troop', hp: 4300, dmg: 380, hitSpeed: 1.6, range: 1, speed: 'fast', count: 1, auraRadius: 2.5, haste: 1.6, slowFactor: 1.2 }, // attack range CHOSEN (notes give aura radius only)
+    { id: 'popkicker', name: 'Popkicker', elixir: 6, type: 'troop', hp: 3200, dmg: 500, hitSpeed: 1.6, range: 1, speed: 'slow', count: 1, kernelDmg: 170, kernelDelay: 0.6 }, // range CHOSEN ("kick range" = close)
+    { id: 'efield', name: 'Efield', elixir: 6, type: 'spell', radius: 4, zoneTime: 6, zoneTick: 1.4, bandDmg: [500, 300, 150, 100] },
+    { id: 'drone', name: 'Drone', elixir: 6, type: 'troop', hp: 3000, dmg: 450, hitSpeed: 1, range: 4, speed: 'norm', count: 1, towerDash: true, dashDelayMin: 0.8, dashDelayMax: 1.3 },
+    { id: 'katana_kid', name: 'Katana Kid', elixir: 7, type: 'troop', hp: 4800, dmg: 400, hitSpeed: 1.7, range: 1, speed: 'norm', count: 1 } // speed CHOSEN (notes: no speed)
   ];
   var MINI_WAFFLE = { hp: 1000, dmg: 120, hitSpeed: 1.4, range: 1, speed: 'norm' };
   var MINI_EAGLE = { hp: 600, dmg: 60, hitSpeed: 1.0, range: 3, speed: 'fast' };
@@ -37,17 +81,20 @@
   function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
   var nextId = 1;
-  function makeEntity(card, side, x, y, isMini, miniDef, parent) {
-    var hp = isMini ? miniDef.hp : (card ? card.hp : TOWER.hp);
+  function makeEntity(card, side, x, y, isMini, miniDef, parent, lvl, parentId) {
+    var sc = lvlScale(lvl);
+    var hp = isMini ? Math.round(miniDef.hp * sc) : (card ? Math.round(card.hp * sc) : TOWER.hp);
+    var dmg = isMini ? Math.round(miniDef.dmg * sc) : (card ? (Array.isArray(card.dmg) ? card.dmg.map(function (d) { return Math.round(d * sc); }) : Math.round(card.dmg * sc)) : TOWER.dmg);
     return {
       id: nextId++, cardId: isMini ? ('mini_' + parent) : (card ? card.id : 'tower'),
       name: isMini ? (parent === 'waaflee' ? 'Mini Waffle' : 'Mini Eagle') : (card ? card.name : 'Tower'),
       side: side, x: x, y: y, hp: hp, maxHp: hp, shield: 0, popT: card ? (isMini ? 0.3 : 0.25) : 0,
       atkCd: 0, isBuilding: !!(card && card.type === 'building'), isTower: !card, isKing: false,
-      isMini: !!isMini, miniDef: miniDef || null, parent: parent || null,
+      isMini: !!isMini, miniDef: miniDef || null, parent: parent || null, parentId: parentId || null, lvl: lvl || 1,
       dead: false, effects: [], shotCount: 0, spawnT: 0, rollT: card && card.rollEvery ? card.rollEvery : 0,
       rollState: null, history: [], splitDone: false, rewindDone: false,
-      shieldedAllies: {}, dmg: isMini ? miniDef.dmg : (card ? card.dmg : TOWER.dmg),
+      shieldedAllies: {}, droneCd: 0, droneState: null,
+      dmg: dmg,
       hitSpeed: isMini ? miniDef.hitSpeed : (card ? card.hitSpeed : TOWER.hitSpeed),
       range: isMini ? miniDef.range : (card ? card.range : TOWER.range),
       speed: isMini ? miniDef.speed : (card ? card.speed : null)
@@ -56,7 +103,12 @@
 
   function makeTower(side, x, y, isKing) {
     var t = makeEntity(null, side, x, y, false);
+    var stats = TOWER_LEVELS[getTowerLevel() - 1];
     t.isKing = !!isKing;
+    t.hp = t.maxHp = stats.hp + (isKing ? KING_HP_BONUS : 0);
+    t.dmg = stats.dmg;
+    t.hitSpeed = TOWER.hitSpeed;
+    t.range = TOWER.range;
     return t;
   }
   function allTowers(s) {
@@ -90,7 +142,7 @@
         player: { sides: [makeTower('player', 80, 430), makeTower('player', 320, 430)], king: makeTower('player', W / 2, H - 60, true) },
         ai: { sides: [makeTower('ai', 80, 170), makeTower('ai', 320, 170)], king: makeTower('ai', W / 2, 60, true) }
       },
-      hands: {}, decks: { player: playerDeck.slice(), ai: aiDeck.slice() },
+      hands: {}, decks: { player: playerDeck.slice(), ai: aiDeck.slice() }, kernels: [],
       nextIdx: { player: 0, ai: 0 }, aiT: 4, log: []
     };
     s.entities.push.apply(s.entities, allTowers(s));
@@ -153,13 +205,15 @@
     e.dead = true; e.hp = 0;
     var card = cardById(e.cardId);
     if (card && card.deathFire) {
-      s.zones.push({ x: e.x, y: e.y, r: 1.5 * TILE, t: card.deathFireTime, dmg: card.deathFire, side: e.side });
+      // Tick starts at 1 so the zone deals exactly 2 ticks of 250 over 2s
+      // (notes: "+250 dmg for 2 sec"), not a third tick on the removal frame.
+      s.zones.push({ x: e.x, y: e.y, r: 1.5 * TILE, t: card.deathFireTime, tick: 1, dmg: Math.round(card.deathFire * lvlScale(e.lvl)), side: e.side, kind: 'fire' });
     }
     if (card && card.splitAt && !e.splitDone && !e.isMini) {
       e.splitDone = true;
       burst(s, e.x, e.y, '#e0a458', 14, 130, 4, 0.6);
       for (var i = 0; i < 2; i++) {
-        var m = makeEntity(card, e.side, e.x + (i === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee');
+        var m = makeEntity(card, e.side, e.x + (i === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee', e.lvl, e.id);
         s.entities.push(m);
       }
     }
@@ -173,6 +227,11 @@
     var card = cardById(s.hands[side][slot]);
     if (!card) return false;
     if (s.elixir[side] < card.elixir) { playFailReason = 'elixir'; return false; }
+    // Player troops use owned card levels; the AI plays at level 1 (chosen:
+    // the notes say nothing about AI levels, and progression should reward
+    // the player, not mirror-match them).
+    var lvl = side === 'player' ? getCardLevel(card.id) : 1;
+    var ls = lvlScale(lvl);
     var ownHalf = side === 'player' ? (y > BRIDGE_Y + 6) : (y < BRIDGE_Y - 6);
     if (card.type === 'spell') {
       if (card.id === 'firelight_ball') {
@@ -185,14 +244,44 @@
         for (var j = 0; j < foes.length; j++) {
           var f = foes[j];
           if (Math.hypot(f.x - x, f.y - y) <= card.radius * TILE) {
-            var dmg = f.isTower || f.isBuilding ? card.towerDmg : card.dmg;
+            var dmg = f.isTower || f.isBuilding ? Math.round(card.towerDmg * ls) : Math.round(card.dmg * ls);
             applyDamage(s, f, dmg, side);
-            if (!f.isTower && !f.isBuilding && !f.dead) addEffect(f, { kind: 'burn', dmg: card.burn, t: card.burnTime, tick: 1 });
+            if (!f.isTower && !f.isBuilding && !f.dead) addEffect(f, { kind: 'burn', dmg: Math.round(card.burn * ls), t: card.burnTime, tick: 1 });
           }
         }
         s.tracers.push({ x1: x - 20, y1: y - 20, x2: x + 20, y2: y + 20, t: 0.25, color: '#ff7b00' });
         burst(s, x, y, '#ff7b00', 12, 120, 4, 0.5);
         burst(s, x, y, '#ffd34f', 6, 80, 3, 0.4);
+        cycleHand(s, side, slot);
+        return true;
+      }
+      if (card.id === 'dagger_dip') {
+        // Buffs friendly troops AND towers in radius (notes: "Allies +
+        // Towers", not buildings). Each buffed unit's next attack poisons
+        // (100 dmg x 3s); the buff is consumed on that attack.
+        var friends = friendliesOf(s, side);
+        var inRadius = [];
+        for (var k = 0; k < friends.length; k++) {
+          if (Math.hypot(friends[k].x - x, friends[k].y - y) <= card.radius * TILE) inRadius.push(friends[k]);
+        }
+        var tws = ownTowers(s, side);
+        for (var tw = 0; tw < tws.length; tw++) {
+          if (!tws[tw].dead && Math.hypot(tws[tw].x - x, tws[tw].y - y) <= card.radius * TILE) inRadius.push(tws[tw]);
+        }
+        if (!inRadius.length) { playFailReason = 'targets'; return false; }
+        s.elixir[side] -= card.elixir;
+        for (var m2 = 0; m2 < inRadius.length; m2++) {
+          addEffect(inRadius[m2], { kind: 'dagger', dmg: Math.round(card.poison * ls), t: 9999, tick: 1 });
+        }
+        burst(s, x, y, '#a78bfa', 10, 70, 3, 0.6);
+        cycleHand(s, side, slot);
+        return true;
+      }
+      if (card.id === 'efield') {
+        // Persistent damage zone: 6s, ticks every 1.4s, falloff by band.
+        s.elixir[side] -= card.elixir;
+        s.zones.push({ x: x, y: y, r: card.radius * TILE, t: card.zoneTime, tick: card.zoneTick, zoneTick: card.zoneTick, bandDmg: card.bandDmg.map(function (d) { return Math.round(d * ls); }), side: side, kind: 'efield' });
+        burst(s, x, y, '#22d3ee', 12, 100, 3, 0.5);
         cycleHand(s, side, slot);
         return true;
       }
@@ -229,7 +318,7 @@
     var n = card.count || 1;
     for (var m = 0; m < n; m++) {
       var ox = n === 1 ? 0 : (m - (n - 1) / 2) * 26;
-      s.entities.push(makeEntity(card, side, x + ox, y + (m % 2) * 12, false));
+      s.entities.push(makeEntity(card, side, x + ox, y + (m % 2) * 12, false, null, null, lvl));
     }
     cycleHand(s, side, slot);
     return true;
@@ -250,6 +339,10 @@
         var foes = friendliesOf(s, 'player');
         var target = foes.length ? nearest(foes, W / 2, H - 200) : s.towers.player.king;
         playCard(s, 'ai', slot, target.x, target.y);
+      } else if (card.id === 'efield') {
+        var foes2 = friendliesOf(s, 'player');
+        var target2 = foes2.length ? nearest(foes2, W / 2, H - 200) : s.towers.player.king;
+        playCard(s, 'ai', slot, target2.x, target2.y);
       } else {
         var friends = friendliesOf(s, 'ai');
         if (friends.length) { var f = friends[Math.floor(Math.random() * friends.length)]; playCard(s, 'ai', slot, f.x, f.y); }
@@ -257,6 +350,33 @@
     } else {
       playCard(s, 'ai', slot, 60 + Math.random() * (W - 120), 100 + Math.random() * 160);
     }
+  }
+
+  // Overclocker aura: allies within 2.5 tiles attack 60% faster (interval
+  // / 1.6), enemies within 2.5 tiles attack 20% slower (interval x 1.2).
+  // Each effect applies at most once ("up to 60%" does not stack).
+  function auraIntervalFactor(s, e) {
+    var haste = false, slow = false;
+    for (var i = 0; i < s.entities.length; i++) {
+      var o = s.entities[i];
+      if (o.dead || o.isTower || o === e) continue;
+      var oc = cardById(o.cardId);
+      if (!oc || !oc.auraRadius) continue;
+      if (Math.hypot(o.x - e.x, o.y - e.y) > oc.auraRadius * TILE) continue;
+      if (o.side === e.side) haste = true; else slow = true;
+    }
+    return (haste ? 1 / 1.6 : 1) * (slow ? 1.2 : 1);
+  }
+  // A mini eagle whose parent Eagle Eye is alive fires only when the parent
+  // fires (notes: "shoots a spitball when you do"). Orphaned minis attack
+  // on their own cycle.
+  function syncedMiniParent(s, e) {
+    if (!e.isMini || e.cardId !== 'mini_eagle' || !e.parentId) return null;
+    for (var i = 0; i < s.entities.length; i++) {
+      var o = s.entities[i];
+      if (o.id === e.parentId && !o.dead && o.side === e.side) return o;
+    }
+    return null;
   }
 
   function update(s, dt) {
@@ -276,14 +396,36 @@
     s.elixir.ai = Math.min(ELIXIR_MAX, s.elixir.ai + dt / ELIXIR_REGEN);
     aiThink(s, dt);
 
-    // Zones (Lazah-Beam fire)
+    // Popkicker kernels: delayed 170 dmg to the kicked target.
+    for (var ki = s.kernels.length - 1; ki >= 0; ki--) {
+      var kn = s.kernels[ki];
+      kn.t -= dt;
+      if (kn.t <= 0) {
+        if (kn.target && !kn.target.dead) {
+          applyDamage(s, kn.target, kn.dmg, kn.side);
+          burst(s, kn.target.x, kn.target.y, '#fbbf24', 8, 80, 3, 0.4);
+        }
+        s.kernels.splice(ki, 1);
+      }
+    }
+    // Zones (Lazah-Beam fire, Efield)
     for (var zi = s.zones.length - 1; zi >= 0; zi--) {
       var z = s.zones[zi];
       z.t -= dt; z.tick = (z.tick || 0) - dt;
       if (z.tick <= 0) {
-        z.tick = 1;
+        z.tick = z.kind === 'efield' ? z.zoneTick : 1;
         var foes = enemiesOf(s, z.side);
-        for (var f = 0; f < foes.length; f++) if (Math.hypot(foes[f].x - z.x, foes[f].y - z.y) <= z.r) applyDamage(s, foes[f], z.dmg, z.side);
+        for (var f = 0; f < foes.length; f++) {
+          var dd = Math.hypot(foes[f].x - z.x, foes[f].y - z.y);
+          if (dd <= z.r) {
+            if (z.kind === 'efield') {
+              var band = dd <= TILE ? 0 : (dd <= 2 * TILE ? 1 : (dd <= 3 * TILE ? 2 : 3));
+              applyDamage(s, foes[f], z.bandDmg[band], z.side);
+            } else {
+              applyDamage(s, foes[f], z.dmg, z.side);
+            }
+          }
+        }
       }
       if (z.t <= 0) s.zones.splice(zi, 1);
     }
@@ -335,7 +477,7 @@
       if (card && card.splitAt && !e.splitDone && !e.isMini && e.hp <= e.maxHp * card.splitAt) {
         e.splitDone = true;
         burst(s, e.x, e.y, '#e0a458', 14, 130, 4, 0.6);
-        for (var w = 0; w < 2; w++) s.entities.push(makeEntity(card, e.side, e.x + (w === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee'));
+        for (var w = 0; w < 2; w++) s.entities.push(makeEntity(card, e.side, e.x + (w === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee', e.lvl, e.id));
       }
       // Eagle Eye spawns a mini eagle every 3s
       if (card && card.spawnEvery && !e.isMini) {
@@ -344,7 +486,7 @@
           e.spawnT = 0;
           var minis = 0;
           for (var mi = 0; mi < s.entities.length; mi++) if (s.entities[mi].parent === 'eagle' && s.entities[mi].side === e.side && !s.entities[mi].dead) minis++;
-          if (minis < 5) { s.entities.push(makeEntity(card, e.side, e.x + 14, e.y, true, MINI_EAGLE, 'eagle')); burst(s, e.x + 14, e.y, '#f5f5f4', 6, 60, 3, 0.5); }
+          if (minis < 5) { s.entities.push(makeEntity(card, e.side, e.x + 14, e.y, true, MINI_EAGLE, 'eagle', e.lvl, e.id)); burst(s, e.x + 14, e.y, '#f5f5f4', 6, 60, 3, 0.5); }
         }
       }
       // Guard shield aura
@@ -354,7 +496,7 @@
           var a = allies[ai];
           if (a !== e && !e.shieldedAllies[a.id] && Math.hypot(a.x - e.x, a.y - e.y) <= card.shieldRadius * TILE) {
             e.shieldedAllies[a.id] = true;
-            a.shield += card.shieldAura;
+            a.shield += Math.round(card.shieldAura * lvlScale(e.lvl));
           }
         }
       }
@@ -378,6 +520,46 @@
         }
         continue;
       }
+      // Drone: tower-focused dasher. Marches to the nearest living enemy
+      // tower; when one is within 4 tiles, dashes in, hits for 450, dashes
+      // back, then waits 0.8-1.3s. It never engages troops.
+      if (card && card.towerDash) {
+        if (e.droneState) {
+          var ds = e.droneState;
+          var tx = ds.phase === 'out' ? ds.tower.x : ds.ox, ty = ds.phase === 'out' ? ds.tower.y : ds.oy;
+          var ddx = tx - e.x, ddy = ty - e.y, dd = Math.hypot(ddx, ddy);
+          var dashSp = 420;
+          if (dd <= dashSp * dt) {
+            e.x = tx; e.y = ty;
+            if (ds.phase === 'out') {
+              applyDamage(s, ds.tower, Math.round(card.dmg * lvlScale(e.lvl)), e.side);
+              burst(s, e.x, e.y, '#facc15', 10, 100, 3, 0.4);
+              ds.phase = 'back';
+            } else {
+              e.droneState = null;
+              e.droneCd = card.dashDelayMin + Math.random() * (card.dashDelayMax - card.dashDelayMin);
+            }
+          } else {
+            e.x += ddx / dd * dashSp * dt; e.y += ddy / dd * dashSp * dt;
+            if (Math.random() < dt * 30) s.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, t: 0, life: 0.25, color: '#facc15', size: 2 });
+          }
+        } else {
+          if (e.droneCd > 0) e.droneCd -= dt;
+          var tw = nearest(enemyTowers(s, e.side).filter(function (t) { return !t.dead; }), e.x, e.y);
+          if (tw && !rooted) {
+            if (e.droneCd <= 0 && Math.hypot(tw.x - e.x, tw.y - e.y) <= card.range * TILE) {
+              e.droneState = { phase: 'out', tower: tw, ox: e.x, oy: e.y };
+            } else if (e.droneCd <= 0) {
+              // Out of dash range: march toward the tower. During the
+              // post-dash cooldown the drone holds position (the wait).
+              var mdx = tw.x - e.x, mdy = tw.y - e.y, md = Math.hypot(mdx, mdy);
+              if (md > 0) { var sp = SPEEDS[e.speed] || 65; e.x += mdx / md * sp * dt; e.y += mdy / md * sp * dt; }
+            }
+          }
+        }
+        e.x = clamp(e.x, 20, W - 20); e.y = clamp(e.y, 30, H - 30);
+        continue;
+      }
       // Ravirolli roll every 5s
       if (card && card.rollEvery) {
         e.rollT -= dt;
@@ -398,7 +580,7 @@
             var rf = rfoes[ri];
             if (!rs.hit[rf.id] && !rf.isTower && Math.abs(rf.y - e.y) < 30 && Math.abs(rf.x - e.x) < 30) {
               rs.hit[rf.id] = true;
-              applyDamage(s, rf, card.rollDmg, e.side);
+              applyDamage(s, rf, Math.round(card.rollDmg * lvlScale(e.lvl)), e.side);
               if (!rf.dead) addEffect(rf, { kind: 'stun', t: 0.5 });
             }
           }
@@ -418,11 +600,13 @@
         if (Math.hypot(foes2[q].x - e.x, foes2[q].y - e.y) <= (e.range || 1) * TILE) inRange.push(foes2[q]);
       }
       var tgt = inRange.length ? nearest(inRange, e.x, e.y) : null;
-      if (tgt && e.dmg && (typeof e.dmg === 'number' || Array.isArray(e.dmg)) && e.atkCd <= 0) {
-        e.atkCd = e.hitSpeed;
+      if (tgt && e.dmg && (typeof e.dmg === 'number' || Array.isArray(e.dmg)) && e.atkCd <= 0 && !syncedMiniParent(s, e)) {
+        e.atkCd = e.hitSpeed * auraIntervalFactor(s, e);
         attack(s, e, tgt, card);
       } else if (!e.isBuilding && !rooted) {
-        var dest = nearest(enemyTowers(s, e.side), e.x, e.y);
+        // March to the nearest LIVING enemy tower (dead towers used to be
+        // valid destinations, stranding troops on corpses).
+        var dest = nearest(enemyTowers(s, e.side).filter(function (t) { return !t.dead; }), e.x, e.y);
         // Aggro: chase a nearby enemy instead of marching past it.
         var nearFoe = nearest(foes2, e.x, e.y);
         if (nearFoe && Math.hypot(nearFoe.x - e.x, nearFoe.y - e.y) <= ((e.range || 1) + 2) * TILE) dest = nearFoe;
@@ -456,10 +640,17 @@
       var inR = [];
       for (var i = 0; i < foes.length; i++) if (!foes[i].isTower && Math.hypot(foes[i].x - t.x, foes[i].y - t.y) <= TOWER.range * TILE) inR.push(foes[i]);
       if (inR.length) {
-        t.atkCd = TOWER.hitSpeed;
+        t.atkCd = t.hitSpeed;
         var tg = nearest(inR, t.x, t.y);
         s.tracers.push({ x1: t.x, y1: t.y, x2: tg.x, y2: tg.y, t: 0.15, color: '#ffd34f' });
-        applyDamage(s, tg, TOWER.dmg, t.side);
+        applyDamage(s, tg, t.dmg, t.side);
+        // Dagger Dip: a buffed tower's shot poisons, then consumes the buff.
+        var daggerIdx = -1;
+        for (var di = 0; di < t.effects.length; di++) if (t.effects[di].kind === 'dagger') { daggerIdx = di; break; }
+        if (daggerIdx >= 0) {
+          if (!tg.isTower && !tg.isBuilding && !tg.dead) addEffect(tg, { kind: 'poison', dmg: t.effects[daggerIdx].dmg, t: 3, tick: 1 });
+          t.effects.splice(daggerIdx, 1);
+        }
       }
     });
 
@@ -484,11 +675,12 @@
   function attack(s, e, tgt, card) {
     if (card && card.id === 'pb_bounce') {
       var hit = [tgt], cur = tgt, dmgIdx = 0;
-      applyDamage(s, tgt, card.dmg[0], e.side);
+      applyDamage(s, tgt, e.dmg[0], e.side);
       s.particles.push({ x: tgt.x, y: tgt.y, vx: 0, vy: -20, t: 0, life: 0.4, color: '#c98a4b', size: 7 });
       while (dmgIdx < 2) {
         dmgIdx++;
-        var foes = enemiesOf(s, e.side).filter(function (f) { return hit.indexOf(f) < 0 && !f.isTower; });
+        // Notes exclude no target type from bounces, so towers can be hit.
+        var foes = enemiesOf(s, e.side).filter(function (f) { return hit.indexOf(f) < 0; });
         var nxt = null, bd = card.bounceRange * TILE;
         for (var i = 0; i < foes.length; i++) {
           var d = Math.hypot(foes[i].x - cur.x, foes[i].y - cur.y);
@@ -497,7 +689,7 @@
         if (!nxt) break;
         s.tracers.push({ x1: cur.x, y1: cur.y, x2: nxt.x, y2: nxt.y, t: 0.2, color: '#c98a4b' });
         s.particles.push({ x: nxt.x, y: nxt.y, vx: 0, vy: -20, t: 0, life: 0.4, color: '#c98a4b', size: dmgIdx === 1 ? 5 : 3 });
-        applyDamage(s, nxt, card.dmg[dmgIdx], e.side);
+        applyDamage(s, nxt, e.dmg[dmgIdx], e.side);
         hit.push(nxt); cur = nxt;
       }
       return;
@@ -511,17 +703,33 @@
       } else {
         s.tracers.push({ x1: e.x, y1: e.y, x2: tgt.x, y2: tgt.y, t: 0.15, color: '#fff' });
       }
-      applyDamage(s, tgt, card.dmg + (isPierce ? card.pierceBonus : 0), e.side);
+      var pierceDmg = e.dmg + (isPierce ? Math.round(card.pierceBonus * lvlScale(e.lvl)) : 0);
+      applyDamage(s, tgt, pierceDmg, e.side);
       if (isPierce) {
         var foes = enemiesOf(s, e.side);
         for (var j = 0; j < foes.length; j++) {
           var f = foes[j];
-          if (f !== tgt && !f.isTower && Math.abs(f.x - tgt.x) < 20 && ((f.y - e.y) * (tgt.y - e.y) > 0)) applyDamage(s, f, card.dmg + card.pierceBonus, e.side);
+          if (f !== tgt && !f.isTower && Math.abs(f.x - tgt.x) < 20 && ((f.y - e.y) * (tgt.y - e.y) > 0)) applyDamage(s, f, pierceDmg, e.side);
         }
       }
       return;
     }
     var dmg = typeof e.dmg === 'number' ? e.dmg : 0;
+    if (card && card.id === 'eagle_eye') {
+      // Mini eagles fire a spitball when Eagle Eye does (notes).
+      for (var ei2 = 0; ei2 < s.entities.length; ei2++) {
+        var mn = s.entities[ei2];
+        if (mn.dead || mn.side !== e.side || mn.cardId !== 'mini_eagle' || mn.parentId !== e.id) continue;
+        if (Math.hypot(tgt.x - mn.x, tgt.y - mn.y) <= (mn.range || 3) * TILE) {
+          s.tracers.push({ x1: mn.x, y1: mn.y, x2: tgt.x, y2: tgt.y, t: 0.12, color: '#f5f5f4' });
+          applyDamage(s, tgt, mn.dmg, e.side);
+        }
+      }
+    }
+    if (card && card.id === 'popkicker') {
+      // A kernel explodes for 170 dmg 0.6s after every kick.
+      s.kernels.push({ target: tgt, t: card.kernelDelay, dmg: Math.round(card.kernelDmg * lvlScale(e.lvl)), side: e.side });
+    }
     if (card && card.id === 'mustard') {
       var mdx = tgt.x - e.x, mdy = tgt.y - e.y, md = Math.hypot(mdx, mdy) || 1;
       for (var sq = 0; sq < 6; sq++) s.particles.push({ x: e.x + mdx / md * (8 + sq * 4), y: e.y + mdy / md * (8 + sq * 4), vx: mdx / md * 60, vy: mdy / md * 60, t: 0, life: 0.3, color: '#f7c948', size: 3 });
@@ -529,10 +737,24 @@
     s.tracers.push({ x1: e.x, y1: e.y, x2: tgt.x, y2: tgt.y, t: 0.12, color: '#ffffff' });
     applyDamage(s, tgt, dmg, e.side);
     if (card && card.poison && !tgt.isTower && !tgt.isBuilding && !tgt.dead) {
-      addEffect(tgt, { kind: 'poison', dmg: card.poison, t: card.poisonTicks, tick: 1 });
+      addEffect(tgt, { kind: 'poison', dmg: Math.round(card.poison * lvlScale(e.lvl)), t: card.poisonTicks, tick: 1 });
     }
     if (card && card.burn && !tgt.isTower && !tgt.isBuilding && !tgt.dead) {
-      addEffect(tgt, { kind: 'burn', dmg: card.burn, t: card.burnTime, tick: 1 });
+      addEffect(tgt, { kind: 'burn', dmg: Math.round(card.burn * lvlScale(e.lvl)), t: card.burnTime, tick: 1 });
+    }
+    // Dagger Dip: the buffed unit's next attack poisons, then consumes the buff.
+    var daggerIdx = -1;
+    for (var di = 0; di < e.effects.length; di++) if (e.effects[di].kind === 'dagger') { daggerIdx = di; break; }
+    if (daggerIdx >= 0) {
+      if (!tgt.isTower && !tgt.isBuilding && !tgt.dead) {
+        addEffect(tgt, { kind: 'poison', dmg: e.effects[daggerIdx].dmg, t: 3, tick: 1 });
+      }
+      e.effects.splice(daggerIdx, 1);
+    }
+    // Run N Xplode: suicide runners explode on their first hit.
+    if (card && card.suicide && !e.dead) {
+      burst(s, e.x, e.y, '#f97316', 14, 140, 4, 0.5);
+      killEntity(s, e);
     }
     if (card && card.root && !tgt.isTower && !tgt.dead) {
       addEffect(tgt, { kind: 'root', t: card.root });
@@ -694,6 +916,57 @@
     } else if (id === 'portn_shield') {
       poly(ctx, [[0, -r - 2], [r * 0.8, -r * 0.4], [r * 0.6, r * 0.8], [0, r + 2], [-r * 0.6, r * 0.8], [-r * 0.8, -r * 0.4]], '#22c55e');
       poly(ctx, [[0, -r + 3], [r * 0.45, -r * 0.2], [r * 0.35, r * 0.5], [0, r - 2], [-r * 0.35, r * 0.5], [-r * 0.45, -r * 0.2]], '#bbf7d0');
+    } else if (id === 'the_tank') {
+      rr(ctx, -14, -12, 28, 24, 4, '#5b6472');
+      rr(ctx, -10, 12, 20, 8, 2, '#3f4756');
+      circ(ctx, -8, 18, 4, '#222'); circ(ctx, 8, 18, 4, '#222');
+      rr(ctx, -6, -18, 12, 8, 2, '#7c8698');
+      line(ctx, 0, -18, 0, -26, '#3f4756', 4);
+      eyes(ctx, 0, -4, 4);
+    } else if (id === 'dagger_dip') {
+      // Dagger dipping into a pot (spell icon).
+      rr(ctx, -9, 2, 18, 14, 4, '#6d28d9');
+      line(ctx, -6, -14, 6, 2, '#e5e7eb', 3);
+      poly(ctx, [[6, 2], [10, -2], [6, -6]], '#e5e7eb');
+      circ(ctx, 0, -4, 3, '#a78bfa');
+    } else if (id === 'run_n_xplode') {
+      rr(ctx, -10, -10, 20, 22, 3, '#dc2626');
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('TNT', 0, 1);
+      line(ctx, 0, -10, 4, -16, '#7a5b00', 2);
+      circ(ctx, 5, -17, 2.5, '#f97316');
+      line(ctx, -10, 2, -15, 8, '#7a1f1f', 2); line(ctx, 10, 2, 15, -4, '#7a1f1f', 2);
+    } else if (id === 'overclocker') {
+      circ(ctx, 0, 0, r + 2, '#f8fafc');
+      ctx.strokeStyle = '#ffd34f'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, r + 2, 0, Math.PI * 2); ctx.stroke();
+      line(ctx, 0, 0, 0, -r * 0.7, '#111827', 2); line(ctx, 0, 0, r * 0.5, 2, '#111827', 2);
+      circ(ctx, 0, 0, 2, '#111827');
+      // Faint ring showing the 2.5-tile aura radius.
+      ctx.strokeStyle = 'rgba(255,211,79,0.25)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 2.5 * TILE, 0, Math.PI * 2); ctx.stroke();
+    } else if (id === 'popkicker') {
+      poly(ctx, [[-10, -12], [10, -12], [7, 12], [-7, 12]], '#ef4444');
+      circ(ctx, -4, -14, 4, '#fef3c7'); circ(ctx, 4, -15, 4, '#fef3c7'); circ(ctx, 0, -12, 4, '#fef3c7');
+      line(ctx, 10, 0, 16, -6, '#7a1f1f', 2);
+      eyes(ctx, 0, 0, 3);
+    } else if (id === 'efield') {
+      circ(ctx, 0, 0, r, '#164e63');
+      ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.6, 0, Math.PI * 2); ctx.stroke();
+      line(ctx, -6, 0, 6, 0, '#22d3ee', 2); line(ctx, 0, -6, 0, 6, '#22d3ee', 2);
+    } else if (id === 'drone') {
+      ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      circ(ctx, 0, 0, r * 0.45, '#22d3ee');
+      line(ctx, -r - 4, -r * 0.5, -r + 4, -r * 0.5, '#475569', 2);
+      line(ctx, r - 4, -r * 0.5, r + 4, -r * 0.5, '#475569', 2);
+      eyes(ctx, 0, -1, 3);
+    } else if (id === 'katana_kid') {
+      circ(ctx, 0, -8, 7, '#f2c79b');
+      rr(ctx, -7, 0, 14, 16, 4, '#2563eb');
+      line(ctx, 8, -12, 16, -2, '#e5e7eb', 2.5);
+      line(ctx, -8, -12, -16, -2, '#e5e7eb', 2.5);
+      eyes(ctx, 0, -8, 3);
     } else {
       circ(ctx, 0, 0, r, team);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -713,6 +986,10 @@
       try { ctx.setLineDash([4, 3]); } catch (err) {}
       ctx.beginPath(); ctx.arc(e.x, e.y, r + 8, 0, Math.PI * 2); ctx.stroke();
       try { ctx.setLineDash([]); } catch (err) {}
+    }
+    var hasDagger = e.effects.some(function (x) { return x.kind === 'dagger'; });
+    if (hasDagger) {
+      poly(ctx, [[e.x, e.y - r - 16], [e.x + 4, e.y - r - 8], [e.x, e.y - r - 10], [e.x - 4, e.y - r - 8]], '#a78bfa');
     }
     var rooted = e.effects.some(function (x) { return x.kind === 'root'; });
     if (rooted) {
@@ -756,6 +1033,13 @@
     ctx.fillStyle = '#d9c08a'; ctx.fillRect(W / 2 - 30, BRIDGE_Y - 14, 60, 28); // bridge
     for (var zi = 0; zi < s.zones.length; zi++) {
       var z = s.zones[zi];
+      if (z.kind === 'efield') {
+        ctx.fillStyle = 'rgba(34,211,238,0.18)';
+        ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(34,211,238,0.7)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.stroke();
+        continue;
+      }
       ctx.fillStyle = 'rgba(255,123,0,0.35)';
       ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#ff7b00';
@@ -809,34 +1093,190 @@
   }
 
   // ---------- Persistence (guarded for non-browser use) ----------
+  var memStore = {};
   function storeGet(k, fallback) {
     try {
-      if (typeof localStorage === 'undefined') return fallback;
-      var v = localStorage.getItem(k);
-      return v === null ? fallback : JSON.parse(v);
-    } catch (err) { return fallback; }
+      if (typeof localStorage !== 'undefined') {
+        var v = localStorage.getItem(k);
+        return v === null ? fallback : JSON.parse(v);
+      }
+    } catch (err) {}
+    return (k in memStore) ? memStore[k] : fallback;
   }
   function storeSet(k, v) {
-    try { if (typeof localStorage !== 'undefined') localStorage.setItem(k, JSON.stringify(v)); } catch (err) {}
+    try {
+      if (typeof localStorage !== 'undefined') { localStorage.setItem(k, JSON.stringify(v)); return; }
+    } catch (err) {}
+    memStore[k] = v;
   }
   var DEFAULT_DECK = ['mustard', 'plant_spirit', 'guard', 'firelight_ball', 'ravirolli', 'eagle_eye', 'radio_tower', 'lazah_beam'];
-  var AI_DECK = ['mustard', 'plant_spirit', 'firelight_ball', 'ravirolli', 'eagle_eye', 'radio_tower', 'wolverdog', 'lazah_beam'];
+  var AI_DECK = ['mustard', 'plant_spirit', 'firelight_ball', 'run_n_xplode', 'drone', 'radio_tower', 'katana_kid', 'wolverdog'];
 
-  function chestReward(tier) {
-    var counts = { 1: 3, 2: 4, 3: 5, 4: 8 };
-    var crs = { 1: 50, 2: 100, 3: 200, 4: 400 };
-    var cards = [];
-    for (var i = 0; i < (counts[tier] || 3); i++) cards.push(CARDS[Math.floor(Math.random() * CARDS.length)].id);
-    return { cards: cards, crs: crs[tier] || 50 };
+  // ----- Levels -----
+  function getCardLevels() { var lv = storeGet('bb_levels', {}); return (lv && typeof lv === 'object') ? lv : {}; }
+  function getCardLevel(id) { var lv = getCardLevels(); return lv[id] || 1; }
+  function avgCardLevel() {
+    var sum = 0;
+    for (var i = 0; i < CARDS.length; i++) sum += getCardLevel(CARDS[i].id);
+    return CARDS.length ? sum / CARDS.length : 1;
   }
-  function rollChestTier() {
-    var r = Math.random();
-    return r < 0.7 ? 1 : (r < 0.9 ? 2 : (r < 0.98 ? 3 : 4));
+  function towerLevelComputed() {
+    var avg = avgCardLevel(), lvl = 1;
+    for (var i = 0; i < TOWER_AVG_REQ.length; i++) if (avg >= TOWER_AVG_REQ[i]) lvl = i + 1;
+    return lvl;
+  }
+  // Tower level never drops once reached (notes: a new card lowers the
+  // average but you don't lose the level; only balance changes can drop it).
+  function getTowerLevel() {
+    var stored = storeGet('bb_tower_level', 1) || 1;
+    var computed = towerLevelComputed();
+    var lvl = Math.max(stored, computed);
+    if (lvl !== stored) storeSet('bb_tower_level', lvl);
+    return lvl;
+  }
+  function wildCap() { return Math.round(15 + (getTowerLevel() - 1) * (105 / 20)); } // 15 at L1 -> 120 at L21
+  function getWilds() { return storeGet('bb_wilds', 0) || 0; }
+  // Upgrade a card one level. Copies come from the collection first, then
+  // wild cards cover any shortfall (1 wild = 1 copy). Returns a result obj.
+  function upgradeCard(id) {
+    var lvl = getCardLevel(id);
+    if (lvl >= MAX_CARD_LEVEL) return { ok: false, reason: 'max' };
+    var cost = UPGRADE_COSTS[lvl - 1];
+    var col = getCollection(), have = col[id] || 0, wilds = getWilds(), crs = getCrystals();
+    var short = Math.max(0, cost.cards - have);
+    if (short > wilds) return { ok: false, reason: 'cards', need: cost.cards, have: have, wilds: wilds };
+    if (crs < cost.crs) return { ok: false, reason: 'crs', need: cost.crs, have: crs };
+    var usedCopies = Math.min(have, cost.cards);
+    col[id] = have - usedCopies;
+    storeSet('bb_cards', col);
+    if (short > 0) storeSet('bb_wilds', wilds - short);
+    storeSet('bb_crystals', crs - cost.crs);
+    var levels = getCardLevels(); levels[id] = lvl + 1; storeSet('bb_levels', levels);
+    getTowerLevel(); // recompute peak (may rise)
+    return { ok: true, level: lvl + 1, usedCopies: usedCopies, usedWilds: short };
+  }
+
+  // ----- Chests (notes p.14 tiers + p.19 upgrade game) -----
+  // Reward split per tier = Crystils% / Cards% / Rare%. Wilds from high-tier
+  // chests are chosen (notes give no chest wild rate).
+  var CHEST_TIERS = {
+    1: { slots: 3, baseCrs: 50, crsPct: 34, cardsPct: 33, rarePct: 33, wilds: 0 },
+    2: { slots: 4, baseCrs: 100, crsPct: 30, cardsPct: 30, rarePct: 40, wilds: 0 },
+    3: { slots: 5, baseCrs: 200, crsPct: 20, cardsPct: 30, rarePct: 50, wilds: 1 },
+    4: { slots: 8, baseCrs: 400, crsPct: 10, cardsPct: 30, rarePct: 60, wilds: 3 }
+  };
+  // Upgrade-game chances: the starting chest is always tier 1 (p.19
+  // "Starting chest 1"); each of the 4 taps rolls the NEXT tier's listed
+  // chance (T1->T2 50%, T2->T3 20%, T3->T4 11%).
+  var CHEST_UPGRADE_CHANCE = { 1: 0.50, 2: 0.20, 3: 0.11 };
+  function randomCardId(rareOnly) {
+    var pool = rareOnly ? CARDS.filter(isRareCard) : CARDS;
+    return pool[Math.floor(Math.random() * pool.length)].id;
+  }
+  // Grant one card with the overflow rule: a card already at MAX level
+  // converts to 100 Crystils (notes: "overflow cards are worth 100 crs or 1
+  // random card" — Crystils chosen for simplicity).
+  function grantCard(col, id) {
+    if (getCardLevel(id) >= MAX_CARD_LEVEL) return { type: 'crs', amount: 100 };
+    col[id] = (col[id] || 0) + 1;
+    return { type: 'card', id: id };
+  }
+  function chestReward(tier) {
+    var t = CHEST_TIERS[tier] || CHEST_TIERS[1];
+    var col = getCollection();
+    var out = { cards: [], rares: [], crs: t.baseCrs, wilds: 0, overflowCrs: 0 };
+    for (var i = 0; i < t.slots; i++) {
+      var r = Math.random() * 100;
+      if (r < t.crsPct) { out.crs += 50; continue; }
+      var g;
+      if (r < t.crsPct + t.rarePct) {
+        g = grantCard(col, randomCardId(true));
+        if (g.type === 'card') out.rares.push(g.id); else out.overflowCrs += g.amount;
+      } else {
+        g = grantCard(col, randomCardId(false));
+        if (g.type === 'card') out.cards.push(g.id); else out.overflowCrs += g.amount;
+      }
+    }
+    // Wild cards from high-tier chests, capped (excess wilds -> 100 crs each).
+    var cap = wildCap(), have = getWilds();
+    var wilds = Math.min(t.wilds, Math.max(0, cap - have));
+    out.wilds = wilds;
+    out.overflowCrs += (t.wilds - wilds) * 100;
+    storeSet('bb_cards', col);
+    storeSet('bb_crystals', getCrystals() + out.crs + out.overflowCrs);
+    storeSet('bb_wilds', have + wilds);
+    return out;
+  }
+  function chestRewardText(rw, tier) {
+    var parts = [];
+    if (rw.cards.length) parts.push(rw.cards.map(function (id) { return cardById(id).name; }).join(', '));
+    if (rw.rares.length) parts.push('RARE: ' + rw.rares.map(function (id) { return cardById(id).name; }).join(', '));
+    var s = 'Opened a Tier ' + tier + ' chest! +' + rw.crs + ' Crystils';
+    if (rw.overflowCrs) s += ' (+' + rw.overflowCrs + ' overflow)';
+    if (rw.wilds) s += ', +' + rw.wilds + ' wild cards';
+    if (parts.length) s += ' and: ' + parts.join('; ');
+    return s;
+  }
+
+  // ----- Daily wins / streaks (notes p.21) -----
+  // Reward tokens: "chest (N)" = N cards; "chest (A, B)" = A groups of B
+  // cards; "chest (Rare, N)" = N rare-pool cards; "diamond N" = N Crystils.
+  // Each step below is a list of tokens (the 14+ day-4 step has two).
+  var DAILY_SEQUENCES = {
+    reg: [[['cards', 2]], [['chests', 2, 3]], [['crs', 300]], [['cards', 3]]],
+    s3: [[['cards', 3]], [['chests', 2, 5]], [['crs', 500]], [['cards', 3]]],
+    s8: [[['cards', 3]], [['cards', 4]], [['cards', 3]], [['crs', 650]]],
+    s14: [[['cards', 4]], [['cards', 4]], [['crs', 750]], [['chests', 2, 10], ['rare', 3]]],
+    lucky: [[['cards', 5]], [['chests', 2, 15]], [['crs', 800]], [['rare', 5]]]
+  };
+  function dailyBracket(streak, luckyRoll) {
+    if (luckyRoll) return 'lucky';
+    if (streak >= 14) return 's14';
+    if (streak >= 8) return 's8';
+    if (streak >= 3) return 's3';
+    return 'reg';
+  }
+  function describeDailyStep(step) {
+    return step.map(function (tok) {
+      if (tok[0] === 'crs') return tok[1] + ' Crystils';
+      if (tok[0] === 'cards') return tok[1] + ' cards';
+      if (tok[0] === 'chests') return tok[1] + ' chests of ' + tok[2] + ' cards';
+      if (tok[0] === 'rare') return tok[1] + ' rare cards';
+      return '';
+    }).join(' + ');
+  }
+  function getDaily() { return storeGet('bb_daily', { lastDay: '', streak: 0, step: 0, claimedDay: '' }); }
+  // Grant one daily step. Takes the stored daily state + date strings so
+  // tests can drive it with fake dates.
+  function grantDailyStep(daily, todayStr, yesterdayStr) {
+    var streak = (daily.lastDay === yesterdayStr) ? (daily.streak || 0) + 1 : 1;
+    var lucky = Math.random() < 0.10; // "Lucky!" trigger is not specified in the notes; 10% chosen
+    var bracket = dailyBracket(streak, lucky);
+    var seq = DAILY_SEQUENCES[bracket];
+    var stepIdx = daily.step || 0;
+    var step = seq[stepIdx % seq.length];
+    var col = getCollection(), crs = 0, names = [];
+    step.forEach(function (tok) {
+      if (tok[0] === 'crs') { crs += tok[1]; return; }
+      var n = tok[0] === 'cards' ? tok[1] : (tok[0] === 'rare' ? tok[1] : tok[1] * tok[2]);
+      var rareOnly = (tok[0] === 'rare');
+      for (var i = 0; i < n; i++) {
+        var g = grantCard(col, randomCardId(rareOnly));
+        if (g.type === 'card') names.push(cardById(g.id).name); else crs += g.amount;
+      }
+    });
+    storeSet('bb_cards', col);
+    storeSet('bb_crystals', getCrystals() + crs);
+    var next = { lastDay: todayStr, streak: streak, step: (stepIdx + 1) % seq.length, claimedDay: todayStr };
+    storeSet('bb_daily', next);
+    var label = bracket === 'lucky' ? 'Lucky! ' : '';
+    return { text: label + 'Daily reward (streak ' + streak + '): ' + describeDailyStep(step) + (names.length ? ' - ' + names.join(', ') : '') + (crs ? ' (+' + crs + ' Crystils)' : ''), state: next };
   }
 
   // Expose core for headless smoke tests (node).
   if (typeof globalThis !== 'undefined') {
-    globalThis.BashBoyale = { CARDS: CARDS, cardById: cardById, createBattle: createBattle, update: update, playCard: playCard, chestReward: chestReward, makeEntity: makeEntity, applyDamage: applyDamage, drawBattle: drawBattle, DEFAULT_DECK: DEFAULT_DECK, AI_DECK: AI_DECK, getPlayFailReason: function () { return playFailReason; } };
+    globalThis.BashBoyale = { CARDS: CARDS, cardById: cardById, createBattle: createBattle, update: update, playCard: playCard, chestReward: chestReward, makeEntity: makeEntity, applyDamage: applyDamage, drawBattle: drawBattle, DEFAULT_DECK: DEFAULT_DECK, AI_DECK: AI_DECK, getPlayFailReason: function () { return playFailReason; },
+      UPGRADE_COSTS: UPGRADE_COSTS, TOWER_LEVELS: TOWER_LEVELS, TOWER_AVG_REQ: TOWER_AVG_REQ, MAX_CARD_LEVEL: MAX_CARD_LEVEL, lvlScale: lvlScale, getCardLevel: getCardLevel, getCardLevels: getCardLevels, avgCardLevel: avgCardLevel, towerLevelComputed: towerLevelComputed, getTowerLevel: getTowerLevel, wildCap: wildCap, getWilds: getWilds, upgradeCard: upgradeCard, grantCard: grantCard, CHEST_TIERS: CHEST_TIERS, CHEST_UPGRADE_CHANCE: CHEST_UPGRADE_CHANCE, chestRewardText: chestRewardText, DAILY_SEQUENCES: DAILY_SEQUENCES, dailyBracket: dailyBracket, describeDailyStep: describeDailyStep, grantDailyStep: grantDailyStep, getDaily: getDaily, getCollection: getCollection, getCrystals: getCrystals, getChests: getChests, storeGet: storeGet, storeSet: storeSet, isRareCard: isRareCard, auraIntervalFactor: auraIntervalFactor, syncedMiniParent: syncedMiniParent };
   }
 
   // ---------- Browser UI ----------
@@ -851,7 +1291,14 @@
     var clean = d.filter(function (id) { return !!cardById(id); });
     return clean.length ? clean : DEFAULT_DECK.slice();
   }
-  function getChests() { return storeGet('bb_chests', []); }
+  function getChests() {
+    var raw = storeGet('bb_chests', []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(function (c) {
+      if (typeof c === 'number') return { tier: c, taps: 0 }; // pre-PR4 chest: open directly
+      return { tier: c.tier || 1, taps: (c.taps === undefined ? 4 : c.taps) };
+    });
+  }
   function getCrystals() { return storeGet('bb_crystals', 0); }
   function getCollection() { return storeGet('bb_cards', {}); }
 
@@ -860,7 +1307,12 @@
     $('chest-count').textContent = chests.length ? '(' + chests.length + ')' : '';
     var col = getCollection(), total = 0;
     Object.keys(col).forEach(function (k) { total += col[k]; });
-    $('collection-summary').textContent = 'Collection: ' + total + ' cards · ' + getCrystals() + ' Crystils';
+    $('collection-summary').textContent = 'Collection: ' + total + ' cards · ' + getCrystals() + ' Crystils · ' + getWilds() + ' wild cards';
+    $('tower-summary').textContent = 'Tower Lv ' + getTowerLevel() + ' (card avg ' + avgCardLevel().toFixed(1) + ') · Wild cap ' + wildCap();
+    var d = getDaily(), today = new Date().toDateString();
+    var bracket = dailyBracket(d.streak || 0, false);
+    var next = DAILY_SEQUENCES[bracket][(d.step || 0) % 4];
+    $('daily-info').textContent = 'Streak: ' + (d.streak || 0) + ' days · Next reward: ' + describeDailyStep(next) + (d.claimedDay === today ? ' · Claimed today!' : ' · Win a battle today to claim!');
   }
   function renderDeckScreen() {
     var deck = getDeck();
@@ -870,12 +1322,32 @@
     }).join('');
     drawIcons($('deck-slots'));
     $('deck-status').textContent = 'Deck: ' + deck.length + ' / 8' + (deck.length === 8 ? ' — ready' : ' — tap cards below to add/remove');
+    $('tower-info').textContent = 'Tower Lv ' + getTowerLevel() + ' (card avg ' + avgCardLevel().toFixed(1) + ') · Wilds: ' + getWilds() + ' / ' + wildCap();
     $('card-grid').innerHTML = CARDS.map(function (c) {
       var n = deck.filter(function (x) { return x === c.id; }).length;
-      return '<div class="card' + (n ? ' in-deck' : '') + '" data-id="' + c.id + '"><canvas class="icon" width="48" height="48" data-icon="' + c.id + '"></canvas><div class="name">' + c.name + '</div><div class="cost">' + c.elixir + ' elixir · ' + c.type + '</div><div>' + (n ? 'in deck' : 'tap to add') + '</div></div>';
+      var lvl = getCardLevel(c.id);
+      var upHtml = '';
+      if (lvl < MAX_CARD_LEVEL) {
+        var cost = UPGRADE_COSTS[lvl - 1];
+        var col = getCollection(), have = col[c.id] || 0, wilds = getWilds();
+        var short = Math.max(0, cost.cards - have);
+        var afford = short <= wilds && getCrystals() >= cost.crs;
+        upHtml = '<button class="mini-btn" data-up="' + c.id + '"' + (afford ? '' : ' disabled') + '>Upgrade to Lv ' + (lvl + 1) + ' (' + cost.cards + ' cards + ' + cost.crs + ' crs)</button>';
+      } else {
+        upHtml = '<div>MAX level</div>';
+      }
+      return '<div class="card' + (n ? ' in-deck' : '') + '" data-id="' + c.id + '"><canvas class="icon" width="48" height="48" data-icon="' + c.id + '"></canvas><div class="name">' + c.name + '</div><div class="cost">' + c.elixir + ' elixir · ' + c.type + ' · Lv ' + lvl + '</div><div>' + (n ? 'in deck' : 'tap to add') + '</div>' + upHtml + '</div>';
     }).join('');
     drawIcons($('card-grid'));
     var grid = $('card-grid');
+    grid.querySelectorAll('[data-up]').forEach(function (btn) {
+      btn.onclick = function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        var res = upgradeCard(btn.getAttribute('data-up'));
+        $('deck-status').textContent = res.ok ? 'Upgraded to Lv ' + res.level + '!' : 'Cannot upgrade: ' + (res.reason === 'max' ? 'already MAX' : (res.reason === 'cards' ? 'need ' + res.need + ' cards (have ' + res.have + ', ' + res.wilds + ' wilds)' : 'need ' + res.need + ' Crystils (have ' + res.have + ')'));
+        renderDeckScreen();
+      };
+    });
     grid.querySelectorAll('.card').forEach(function (el) {
       el.onclick = function () {
         var id = el.getAttribute('data-id'), d = getDeck();
@@ -890,22 +1362,34 @@
   }
   function renderChestScreen() {
     $('crystal-count').textContent = getCrystals();
+    $('wild-count').textContent = getWilds() + ' / ' + wildCap();
     var chests = getChests();
-    $('chest-list').innerHTML = chests.length ? chests.map(function (t, i) {
-      return '<div class="chest" data-i="' + i + '"><div>Tier ' + t + ' chest</div><div>tap to open</div></div>';
+    $('chest-list').innerHTML = chests.length ? chests.map(function (c, i) {
+      var label = c.taps > 0 ? 'Tier ' + c.tier + ' chest - ' + c.taps + ' upgrade taps left' : 'Tier ' + c.tier + ' chest - tap to open';
+      return '<div class="chest" data-i="' + i + '"><div>' + label + '</div><div>' + (c.taps > 0 ? 'tap to try an upgrade' : 'tap to open') + '</div></div>';
     }).join('') : '<p>No chests yet — win a battle to earn one!</p>';
     $('chest-list').querySelectorAll('.chest').forEach(function (el) {
       el.onclick = function () {
         var idx = parseInt(el.getAttribute('data-i'), 10);
-        var all = getChests(), tier = all.splice(idx, 1)[0];
-        var rw = chestReward(tier), col = getCollection();
-        rw.cards.forEach(function (id) { col[id] = (col[id] || 0) + 1; });
-        storeSet('bb_cards', col);
-        storeSet('bb_crystals', getCrystals() + rw.crs);
-        storeSet('bb_chests', all);
-        $('chest-rewards').textContent = 'Opened a Tier ' + tier + ' chest! +' + rw.crs + ' Crystils and: ' +
-          rw.cards.map(function (id) { return cardById(id).name; }).join(', ');
-        renderChestScreen();
+        var all = getChests(), c = all[idx];
+        if (c.taps > 0) {
+          c.taps--;
+          var chance = CHEST_UPGRADE_CHANCE[c.tier] || 0;
+          var upgraded = c.tier < 4 && Math.random() < chance;
+          if (upgraded) c.tier++;
+          if (c.tier >= 4) c.taps = 0;
+          storeSet('bb_chests', all);
+          $('chest-rewards').textContent = upgraded
+            ? 'Upgraded! Now a Tier ' + c.tier + ' chest. ' + (c.taps > 0 ? c.taps + ' taps left.' : 'Open it!')
+            : 'No upgrade this tap. ' + (c.taps > 0 ? c.taps + ' taps left.' : 'Open it!');
+          renderChestScreen();
+        } else {
+          all.splice(idx, 1);
+          storeSet('bb_chests', all);
+          var rw = chestReward(c.tier);
+          $('chest-rewards').textContent = chestRewardText(rw, c.tier);
+          renderChestScreen();
+        }
       };
     });
   }
@@ -941,6 +1425,8 @@
     $('ai-elixir-text').textContent = 'AI: ' + Math.floor(battle.elixir.ai) + ' / ' + ELIXIR_MAX;
     $('ai-tower-hp').style.width = Math.max(0, battle.towers.ai.king.hp / battle.towers.ai.king.maxHp * 100) + '%';
     $('player-tower-hp').style.width = Math.max(0, battle.towers.player.king.hp / battle.towers.player.king.maxHp * 100) + '%';
+    $('ai-king-label').textContent = 'AI King Lv ' + getTowerLevel();
+    $('player-king-label').textContent = 'Your King Lv ' + getTowerLevel();
     $('ai-towers-left').textContent = towersAlive(battle.towers.ai) + '/3 towers';
     $('player-towers-left').textContent = towersAlive(battle.towers.player) + '/3 towers';
     $('timer').textContent = fmtTime(Math.max(0, battle.timeLeft));
@@ -966,8 +1452,16 @@
     var sub = 'AI towers down ' + (3 - towersAlive(battle.towers.ai)) + '/3 · Your towers down ' + (3 - towersAlive(battle.towers.player)) + '/3 · King HP: AI ' + Math.max(0, Math.round(battle.towers.ai.king.hp)) + ' / You ' + Math.max(0, Math.round(battle.towers.player.king.hp));
     if (battle.result === 'win') {
       var chests = getChests();
-      if (chests.length < 4) { chests.push(rollChestTier()); storeSet('bb_chests', chests); sub += ' · You earned a chest!'; }
+      if (chests.length < 4) { chests.push({ tier: 1, taps: 4 }); storeSet('bb_chests', chests); sub += ' · You earned a chest!'; }
       else sub += ' · (chest slots full — open one first!)';
+      // Daily win: one claim per calendar day.
+      var d = getDaily();
+      var today = new Date().toDateString();
+      var yesterday = new Date(Date.now() - 864e5).toDateString();
+      if (d.claimedDay !== today) {
+        var rw = grantDailyStep(d, today, yesterday);
+        sub += ' · ' + rw.text;
+      }
     }
     $('end-title').textContent = title;
     $('end-sub').textContent = sub;
@@ -1025,7 +1519,9 @@
   if (typeof globalThis !== 'undefined') {
     globalThis.BashBoyaleUI = {
       getDeck: getDeck, renderDeckScreen: renderDeckScreen, renderHand: renderHand,
-      updateHud: updateHud, startBattle: startBattle,
+      updateHud: updateHud, startBattle: startBattle, renderChestScreen: renderChestScreen,
+      getTowerLevel: getTowerLevel, getCardLevel: getCardLevel, upgradeCard: upgradeCard,
+      getWilds: getWilds, getDaily: getDaily, refreshHome: refreshHome,
       getSelectedSlot: function () { return selectedSlot; },
       getBattle: function () { return battle; }
     };
