@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #1c1530; color: #fff; }
+#app { max-width: 460px; margin: 0 auto; padding: 16px; }
+.screen.hidden, .hidden { display: none !important; }
+.logo { text-align: center; font-size: 40px; margin: 24px 0 8px; }
+.tagline { text-align: center; color: #cfc4ff; }
+.menu { display: flex; flex-direction: column; gap: 12px; margin: 24px 0; }
+.btn { background: #7c5cff; color: #fff; border: none; border-radius: 12px; padding: 12px 16px; font-size: 16px; cursor: pointer; }
+.btn:hover { background: #9378ff; }
+.btn:disabled { background: #555; cursor: not-allowed; }
+.btn.big { font-size: 20px; padding: 16px; }
+.btn.small { font-size: 13px; padding: 8px 12px; margin-top: 8px; }
+.btn.selected { outline: 3px solid #ffd34f; }
+.foot { text-align: center; color: #9d90c7; font-size: 13px; }
+.card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.deck-slots { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.card { background: #2d2350; border-radius: 12px; padding: 10px 6px; text-align: center; cursor: pointer; border: 2px solid transparent; }
+.card .emoji { font-size: 26px; }
+.card .name { font-size: 12px; font-weight: bold; }
+.card .cost { color: #ff9ff3; font-size: 13px; }
+.card.in-deck { border-color: #ffd34f; background: #3d2f6b; }
+.chest-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.chest { background: #2d2350; border-radius: 12px; padding: 16px; text-align: center; cursor: pointer; }
+.rewards { background: #2d2350; border-radius: 12px; padding: 12px; margin: 12px 0; min-height: 20px; }
+.battle-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.towerbar { flex: 1; font-size: 13px; }
+.hpbar { background: #444; border-radius: 8px; height: 12px; overflow: hidden; margin-top: 4px; }
+.hpfill { background: #ff4b55; height: 100%; width: 100%; }
+.hpfill.good { background: #62ef88; }
+.timer { font-size: 22px; font-weight: bold; }
+#arena { width: 100%; max-width: 400px; display: block; margin: 0 auto; border-radius: 12px; background: #3d9b4f; cursor: crosshair; }
+.battle-msg { text-align: center; margin: 8px 0; color: #ffe082; min-height: 20px; }
+.elixir-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.elixirbar { flex: 1; background: #444; border-radius: 8px; height: 14px; overflow: hidden; }
+.elixirfill { background: #ff4bd8; height: 100%; width: 50%; }
+.hand { display: flex; gap: 8px; }
+.hand .card { flex: 1; }
+.hand .card.cant-afford { opacity: 0.45; }
+.hand-meta { text-align: center; color: #9d90c7; margin-top: 6px; }
+.battle-end { text-align: center; background: #2d2350; border-radius: 12px; padding: 16px; margin-top: 12px; }

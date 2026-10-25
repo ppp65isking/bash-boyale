@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bash Boyale</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main id="app">
+  <!-- HOME -->
+  <section id="screen-home" class="screen">
+    <h1 class="logo">🍔 BASH BOYALE 🍔</h1>
+    <p class="tagline">Food fights. Tower falls. 2:00 on the clock.</p>
+    <div class="menu">
+      <button id="btn-play" class="btn big">▶ Play vs AI</button>
+      <button id="btn-deck" class="btn">🃏 Deck Builder</button>
+      <button id="btn-chests" class="btn">📦 Chests <span id="chest-count"></span></button>
+    </div>
+    <p class="foot">PR 1 — 15 cards · Home · Arena · AI opponent · Deck builder · Chests</p>
+    <p class="foot" id="collection-summary"></p>
+  </section>
+
+  <!-- DECK BUILDER -->
+  <section id="screen-deck" class="screen hidden">
+    <h2>🃏 Deck Builder</h2>
+    <p>Pick exactly 8 cards. Your deck is saved automatically.</p>
+    <div id="deck-slots" class="deck-slots"></div>
+    <p id="deck-status"></p>
+    <div id="card-grid" class="card-grid"></div>
+    <button id="btn-deck-back" class="btn">← Back</button>
+  </section>
+
+  <!-- CHESTS -->
+  <section id="screen-chests" class="screen hidden">
+    <h2>📦 Chests</h2>
+    <p>Win battles to earn chests. Open them for cards and Crystils.</p>
+    <p>💎 Crystils: <span id="crystal-count">0</span></p>
+    <div id="chest-list" class="chest-list"></div>
+    <div id="chest-rewards" class="rewards"></div>
+    <button id="btn-chests-back" class="btn">← Back</button>
+  </section>
+
+  <!-- BATTLE -->
+  <section id="screen-battle" class="screen hidden">
+    <div class="battle-top">
+      <div class="towerbar"><span>🤖 AI Tower</span><div class="hpbar"><div id="ai-tower-hp" class="hpfill"></div></div></div>
+      <div id="timer" class="timer">2:00</div>
+      <div class="towerbar"><span>😀 Your Tower</span><div class="hpbar"><div id="player-tower-hp" class="hpfill good"></div></div></div>
+    </div>
+    <canvas id="arena" width="400" height="600"></canvas>
+    <div id="battle-msg" class="battle-msg">Pick a card, then tap your side of the arena!</div>
+    <div class="elixir-row">
+      <div class="elixirbar"><div id="elixir-fill" class="elixirfill"></div></div>
+      <span id="elixir-text">5 / 10</span>
+      <span id="ai-elixir-text"></span>
+    </div>
+    <div id="hand" class="hand"></div>
+    <div class="hand-meta">Next: <span id="next-card"></span></div>
+    <div id="battle-end" class="battle-end hidden">
+      <h2 id="end-title"></h2>
+      <p id="end-sub"></p>
+      <button id="btn-rematch" class="btn">🔁 Rematch</button>
+      <button id="btn-battle-home" class="btn">🏠 Home</button>
+    </div>
+    <button id="btn-quit" class="btn small">Quit battle</button>
+  </section>
+</main>
+<script src="game.js"></script>
+</body>
+</html>
