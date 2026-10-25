@@ -4,6 +4,24 @@ A browser-first Clash Royale-style card battler with food-themed troops,
 from Anthony's handwritten design notes. Open `index.html` in a browser to
 play — no build step. GitHub Pages-ready from `main`.
 
+## PR 5 — what's in (this PR)
+
+Per-shooter projectiles, no more generic projectiles. Visuals only — no
+stat, elixir, level, tower, timer, deck, chest, AI, or roster changes.
+
+- Every unit that shoots gets its OWN projectile visual: Mustard squirt
+  blobs, Lazah-Beam beam bolt, Radio Tower signal arcs, No-skill shot /
+  piercing tracer, PB n' Bounce bounce balls, Eagle Eye darts, mini-eagle
+  spitballs, Wolverdog fang marks, Ravirolli pellets, Drone diamond strike,
+  Windblower gust streaks, and tower bolts. Melee-only units get a slash
+  mark at the target instead of a traveling line (correct, not a gap).
+  Spells keep their existing visuals (Firelight explosion, Efield zone,
+  Portn-Shield shimmer).
+- Side tinting: all projectiles are tinted by side — player (blue) vs AI
+  (red). The colors live in one constant, `SIDE_PROJECTILE_COLORS`, in
+  `game.js`, so they can be changed in one place later. These colors are
+  TEMPORARY per Anthony and will be changed in a future PR.
+
 ## PR 4 — what's in (this PR)
 
 ### Part A: ability audit (all 15 original cards checked against the notes)

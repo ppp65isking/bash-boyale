@@ -8,6 +8,28 @@
   var W = 400, H = 600, BRIDGE_Y = 300;
   var SPEEDS = { slow: 45, norm: 65, med: 80, fast: 100, vfast: 130 };
   var TOWER = { hp: 1800, dmg: 100, hitSpeed: 1.5, range: 5 }; // notes p.15, L1
+  // PR 5: per-side projectile tint. Player side is blue, AI side is red
+  // (matching the tower team colors). Change these two values to recolor
+  // every projectile in the game — temporary colors, one-line future change.
+  var SIDE_PROJECTILE_COLORS = { player: '#2563eb', ai: '#dc2626' };
+  // Projectile kind per shooter id. Ranged shooters get their own kind;
+  // melee-only units share 'melee' (a slash mark at the target, not a
+  // traveling projectile — correct, not a gap). Spells keep their own
+  // visuals and never go through this table.
+  var PROJECTILE_KINDS = {
+    mustard: 'mustard', ravirolli: 'ravirolli', eagle_eye: 'eagle_eye',
+    lazah_beam: 'lazah_beam', radio_tower: 'radio_tower', wolverdog: 'wolverdog',
+    pb_bounce: 'pb_bounce', no_skill: 'no_skill'
+  };
+  var PROJECTILE_WIDTHS = { mustard: 5, lazah_beam: 6, pb_bounce: 5, no_skill_pierce: 4, tower: 3 };
+  function projectileKindFor(e, card) {
+    if (e.isMini) return e.cardId === 'mini_eagle' ? 'mini_eagle' : 'melee';
+    if (card && PROJECTILE_KINDS[card.id]) return PROJECTILE_KINDS[card.id];
+    return 'melee';
+  }
+  function pushProjectile(s, x1, y1, x2, y2, side, kind, t, w) {
+    s.tracers.push({ x1: x1, y1: y1, x2: x2, y2: y2, t: t || 0.12, kind: kind, side: side, w: w || PROJECTILE_WIDTHS[kind] || 2 });
+  }
   // Tower levels (notes p.15): HP / DMG per level, hit speed 1.5s always.
   var TOWER_LEVELS = [
     { hp: 1800, dmg: 100 }, { hp: 1950, dmg: 125 }, { hp: 2100, dmg: 140 }, { hp: 2300, dmg: 180 },
@@ -515,6 +537,7 @@
               foes[pi].y += dir * card.pushTiles * TILE;
               foes[pi].y = clamp(foes[pi].y, 30, H - 30);
               for (var gp = 0; gp < 3; gp++) s.particles.push({ x: e.x + (Math.random() - 0.5) * 20, y: e.y, vx: (Math.random() - 0.5) * 40, vy: dir * (60 + Math.random() * 60), t: 0, life: 0.4, color: '#bae6fd', size: 2 });
+              pushProjectile(s, e.x, e.y, foes[pi].x, foes[pi].y, e.side, 'windblower', 0.25);
             }
           }
         }
@@ -532,6 +555,7 @@
           if (dd <= dashSp * dt) {
             e.x = tx; e.y = ty;
             if (ds.phase === 'out') {
+              pushProjectile(s, ds.ox, ds.oy, ds.tower.x, ds.tower.y, e.side, 'drone', 0.15);
               applyDamage(s, ds.tower, Math.round(card.dmg * lvlScale(e.lvl)), e.side);
               burst(s, e.x, e.y, '#facc15', 10, 100, 3, 0.4);
               ds.phase = 'back';
@@ -642,7 +666,7 @@
       if (inR.length) {
         t.atkCd = t.hitSpeed;
         var tg = nearest(inR, t.x, t.y);
-        s.tracers.push({ x1: t.x, y1: t.y, x2: tg.x, y2: tg.y, t: 0.15, color: '#ffd34f' });
+        pushProjectile(s, t.x, t.y, tg.x, tg.y, t.side, 'tower', 0.15);
         applyDamage(s, tg, t.dmg, t.side);
         // Dagger Dip: a buffed tower's shot poisons, then consumes the buff.
         var daggerIdx = -1;
@@ -675,6 +699,7 @@
   function attack(s, e, tgt, card) {
     if (card && card.id === 'pb_bounce') {
       var hit = [tgt], cur = tgt, dmgIdx = 0;
+      pushProjectile(s, e.x, e.y, tgt.x, tgt.y, e.side, 'pb_bounce', 0.2);
       applyDamage(s, tgt, e.dmg[0], e.side);
       s.particles.push({ x: tgt.x, y: tgt.y, vx: 0, vy: -20, t: 0, life: 0.4, color: '#c98a4b', size: 7 });
       while (dmgIdx < 2) {
@@ -687,7 +712,7 @@
           if (d <= bd) { bd = d; nxt = foes[i]; }
         }
         if (!nxt) break;
-        s.tracers.push({ x1: cur.x, y1: cur.y, x2: nxt.x, y2: nxt.y, t: 0.2, color: '#c98a4b' });
+        pushProjectile(s, cur.x, cur.y, nxt.x, nxt.y, e.side, 'pb_bounce', 0.2);
         s.particles.push({ x: nxt.x, y: nxt.y, vx: 0, vy: -20, t: 0, life: 0.4, color: '#c98a4b', size: dmgIdx === 1 ? 5 : 3 });
         applyDamage(s, nxt, e.dmg[dmgIdx], e.side);
         hit.push(nxt); cur = nxt;
@@ -699,9 +724,9 @@
       var isPierce = e.shotCount % card.pierceEvery === 0;
       if (isPierce) {
         var pdx = tgt.x - e.x, pdy = tgt.y - e.y, pd = Math.hypot(pdx, pdy) || 1;
-        s.tracers.push({ x1: e.x, y1: e.y, x2: tgt.x + pdx / pd * 70, y2: tgt.y + pdy / pd * 70, t: 0.2, color: '#ff4bd8', w: 4 });
+        pushProjectile(s, e.x, e.y, tgt.x + pdx / pd * 70, tgt.y + pdy / pd * 70, e.side, 'no_skill_pierce', 0.2);
       } else {
-        s.tracers.push({ x1: e.x, y1: e.y, x2: tgt.x, y2: tgt.y, t: 0.15, color: '#fff' });
+        pushProjectile(s, e.x, e.y, tgt.x, tgt.y, e.side, 'no_skill', 0.15);
       }
       var pierceDmg = e.dmg + (isPierce ? Math.round(card.pierceBonus * lvlScale(e.lvl)) : 0);
       applyDamage(s, tgt, pierceDmg, e.side);
@@ -721,7 +746,7 @@
         var mn = s.entities[ei2];
         if (mn.dead || mn.side !== e.side || mn.cardId !== 'mini_eagle' || mn.parentId !== e.id) continue;
         if (Math.hypot(tgt.x - mn.x, tgt.y - mn.y) <= (mn.range || 3) * TILE) {
-          s.tracers.push({ x1: mn.x, y1: mn.y, x2: tgt.x, y2: tgt.y, t: 0.12, color: '#f5f5f4' });
+          pushProjectile(s, mn.x, mn.y, tgt.x, tgt.y, e.side, 'mini_eagle', 0.12);
           applyDamage(s, tgt, mn.dmg, e.side);
         }
       }
@@ -734,7 +759,15 @@
       var mdx = tgt.x - e.x, mdy = tgt.y - e.y, md = Math.hypot(mdx, mdy) || 1;
       for (var sq = 0; sq < 6; sq++) s.particles.push({ x: e.x + mdx / md * (8 + sq * 4), y: e.y + mdy / md * (8 + sq * 4), vx: mdx / md * 60, vy: mdy / md * 60, t: 0, life: 0.3, color: '#f7c948', size: 3 });
     }
-    s.tracers.push({ x1: e.x, y1: e.y, x2: tgt.x, y2: tgt.y, t: 0.12, color: '#ffffff' });
+    (function () {
+      var pk = projectileKindFor(e, card);
+      if (pk === 'melee') {
+        // Melee swing: a slash mark at the target, no traveling line.
+        s.tracers.push({ x1: tgt.x, y1: tgt.y, x2: tgt.x, y2: tgt.y, t: 0.12, kind: 'melee', side: e.side, w: 3 });
+      } else {
+        pushProjectile(s, e.x, e.y, tgt.x, tgt.y, e.side, pk, 0.12);
+      }
+    })();
     applyDamage(s, tgt, dmg, e.side);
     if (card && card.poison && !tgt.isTower && !tgt.isBuilding && !tgt.dead) {
       addEffect(tgt, { kind: 'poison', dmg: Math.round(card.poison * lvlScale(e.lvl)), t: card.poisonTicks, tick: 1 });
@@ -1055,10 +1088,72 @@
       ctx.beginPath(); ctx.arc(g.x, g.y, 12, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
+    // PR 5: projectile tracers draw per-shooter shapes, always tinted by side
+    // via SIDE_PROJECTILE_COLORS. Kind-less tracers (spell effects) keep
+    // their original color.
+    var tline = function (x1, y1, x2, y2, w) {
+      ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    };
     for (var ti = 0; ti < s.tracers.length; ti++) {
       var tr = s.tracers[ti];
-      ctx.strokeStyle = tr.color; ctx.lineWidth = tr.w || 2;
-      ctx.beginPath(); ctx.moveTo(tr.x1, tr.y1); ctx.lineTo(tr.x2, tr.y2); ctx.stroke();
+      if (!tr.kind) {
+        ctx.strokeStyle = tr.color; ctx.lineWidth = tr.w || 2;
+        ctx.beginPath(); ctx.moveTo(tr.x1, tr.y1); ctx.lineTo(tr.x2, tr.y2); ctx.stroke();
+        continue;
+      }
+      var col = SIDE_PROJECTILE_COLORS[tr.side] || tr.color || '#ffffff';
+      ctx.strokeStyle = col; ctx.fillStyle = col;
+      var tdx = tr.x2 - tr.x1, tdy = tr.y2 - tr.y1, tdl = Math.hypot(tdx, tdy) || 1;
+      var tux = tdx / tdl, tuy = tdy / tdl;
+      if (tr.kind === 'melee') {
+        ctx.lineWidth = tr.w || 3;
+        ctx.beginPath(); ctx.arc(tr.x2, tr.y2, 10, -0.7, 0.8); ctx.stroke();
+      } else if (tr.kind === 'lazah_beam') {
+        ctx.globalAlpha = 0.3; tline(tr.x1, tr.y1, tr.x2, tr.y2, (tr.w || 6) + 6); ctx.globalAlpha = 1;
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 6);
+      } else if (tr.kind === 'tower') {
+        ctx.globalAlpha = 0.3; tline(tr.x1, tr.y1, tr.x2, tr.y2, (tr.w || 3) + 4); ctx.globalAlpha = 1;
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 3);
+      } else if (tr.kind === 'radio_tower' || tr.kind === 'windblower') {
+        try { ctx.setLineDash(tr.kind === 'radio_tower' ? [6, 4] : [3, 5]); } catch (err) {}
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 2);
+        try { ctx.setLineDash([]); } catch (err) {}
+      } else if (tr.kind === 'mustard') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 5);
+        for (var bi = 1; bi <= 3; bi++) {
+          ctx.beginPath(); ctx.arc(tr.x1 + tdx * bi / 3, tr.y1 + tdy * bi / 3, 3, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (tr.kind === 'pb_bounce') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 5);
+        ctx.beginPath(); ctx.arc(tr.x2, tr.y2, 5, 0, Math.PI * 2); ctx.fill();
+      } else if (tr.kind === 'eagle_eye') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 3);
+        ctx.beginPath();
+        ctx.moveTo(tr.x2, tr.y2);
+        ctx.lineTo(tr.x2 - tux * 10 - tuy * 5, tr.y2 - tuy * 10 + tux * 5);
+        ctx.lineTo(tr.x2 - tux * 10 + tuy * 5, tr.y2 - tuy * 10 - tux * 5);
+        ctx.closePath(); ctx.fill();
+      } else if (tr.kind === 'drone') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 3);
+        ctx.save(); ctx.translate(tr.x2, tr.y2); ctx.rotate(Math.atan2(tdy, tdx));
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-7, -5); ctx.lineTo(-7, 5); ctx.closePath(); ctx.fill(); ctx.restore();
+      } else if (tr.kind === 'mini_eagle') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 2);
+        ctx.beginPath(); ctx.arc(tr.x2, tr.y2, 2, 0, Math.PI * 2); ctx.fill();
+      } else if (tr.kind === 'ravirolli') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 4);
+        ctx.fillRect(tr.x2 - 3, tr.y2 - 3, 6, 6);
+      } else if (tr.kind === 'wolverdog') {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 3);
+        ctx.beginPath();
+        ctx.moveTo(tr.x2 - tux * 8 - tuy * 4, tr.y2 - tuy * 8 + tux * 4);
+        ctx.lineTo(tr.x2 - tux * 3, tr.y2 - tuy * 3);
+        ctx.moveTo(tr.x2 - tux * 8 + tuy * 4, tr.y2 - tuy * 8 - tux * 4);
+        ctx.lineTo(tr.x2 - tux * 3, tr.y2 - tuy * 3);
+        ctx.stroke();
+      } else {
+        tline(tr.x1, tr.y1, tr.x2, tr.y2, tr.w || 2);
+      }
     }
     for (var pi3 = 0; pi3 < s.particles.length; pi3++) {
       var pp = s.particles[pi3];
@@ -1276,6 +1371,7 @@
   // Expose core for headless smoke tests (node).
   if (typeof globalThis !== 'undefined') {
     globalThis.BashBoyale = { CARDS: CARDS, cardById: cardById, createBattle: createBattle, update: update, playCard: playCard, chestReward: chestReward, makeEntity: makeEntity, applyDamage: applyDamage, drawBattle: drawBattle, DEFAULT_DECK: DEFAULT_DECK, AI_DECK: AI_DECK, getPlayFailReason: function () { return playFailReason; },
+      SIDE_PROJECTILE_COLORS: SIDE_PROJECTILE_COLORS, PROJECTILE_KINDS: PROJECTILE_KINDS, MINI_WAFFLE: MINI_WAFFLE, MINI_EAGLE: MINI_EAGLE,
       UPGRADE_COSTS: UPGRADE_COSTS, TOWER_LEVELS: TOWER_LEVELS, TOWER_AVG_REQ: TOWER_AVG_REQ, MAX_CARD_LEVEL: MAX_CARD_LEVEL, lvlScale: lvlScale, getCardLevel: getCardLevel, getCardLevels: getCardLevels, avgCardLevel: avgCardLevel, towerLevelComputed: towerLevelComputed, getTowerLevel: getTowerLevel, wildCap: wildCap, getWilds: getWilds, upgradeCard: upgradeCard, grantCard: grantCard, CHEST_TIERS: CHEST_TIERS, CHEST_UPGRADE_CHANCE: CHEST_UPGRADE_CHANCE, chestRewardText: chestRewardText, DAILY_SEQUENCES: DAILY_SEQUENCES, dailyBracket: dailyBracket, describeDailyStep: describeDailyStep, grantDailyStep: grantDailyStep, getDaily: getDaily, getCollection: getCollection, getCrystals: getCrystals, getChests: getChests, storeGet: storeGet, storeSet: storeSet, isRareCard: isRareCard, auraIntervalFactor: auraIntervalFactor, syncedMiniParent: syncedMiniParent };
   }
 
