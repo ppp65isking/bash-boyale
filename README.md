@@ -4,7 +4,30 @@ A browser-first Clash Royale-style card battler with food-themed troops,
 from Anthony's handwritten design notes. Open `index.html` in a browser to
 play — no build step. GitHub Pages-ready from `main`.
 
-## PR 2 — what's in (this PR)
+## PR 3 — what's in (this PR)
+
+- **No emojis anywhere** — every button, card, tower, and message is plain
+  text or canvas-drawn art. Hand and deck-grid cards show a small canvas
+  portrait of the character, drawn with the same routine as the arena.
+- **Every card drawn as a proper little character** from the notebook
+  doodles — Mustard the squirting bottle, the leafy Plant Spirit, the
+  pentagon Guard, the robot Lazah-Beam, the peanut-butter jar, the waffle
+  Waaflee, the swordsman Back To Begin, and the rest. Towers are stone
+  structures now (crenellated side towers, crowned king tower), not icons.
+- **Signature animations** — walk wobble on troops, Mustard squirt
+  particles, Lazah-Beam charge glow + ground flames on death, Waaflee burst
+  split, Back To Begin ghost-trail rewind, Guard shield bubbles, Windblower
+  gusts + visible decay shrink, No-skill thick piercing tracers, PB bounce
+  balls sized by damage step, poison drips, shield shimmer, fire trails and
+  burn flames, Plant Spirit pounce arcs + root vines, Ravirolli roll dust,
+  Eagle Eye feather bursts, spawn pop-ins. No stats, costs, or rules
+  changed — only the visuals got richer.
+- **Cheese Monster note** — the overhaul brief listed a Cheese Monster
+  split animation, but Cheese Monster is not one of the 15 in-game cards,
+  and PR 3 adds no new cards, so it has no animation here. It arrives with
+  the other 35 cards in a later PR.
+
+## PR 2 — what's in
 
 - **Bug fixes from the PR 1 playtest** — the hand no longer re-renders every
   animation frame, so tapping a card actually selects it (previously the card
@@ -59,7 +82,7 @@ spots are marked `CHOSEN` in `game.js`.
 | Radio Tower | 4 | Building, 500 dmg / 1.9s, 4 tiles |
 | Portn-Shield | 5 | Spell: 40% damage reduction 7s (target), 10% (others in radius) |
 | Wolverdog | 6 | Poison bites: 55 dmg × 3 ticks |
-| PB n' Bounce | 6 | Building, bouncing balls 410 → 300 → 150 |
+| PB n' Bounce | 6 | Building, bouncing balls 410 to 300 to 150 |
 | Waaflee | 9 | At 25% HP spawns 2 mini waffles |
 | Windblower | 9 | Building, pushes enemies back 1 tile / 1.2s, HP decays |
 | Back To Begin | 10 | At 20% HP teleports back to where it was 4s ago |
