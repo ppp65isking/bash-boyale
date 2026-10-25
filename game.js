@@ -1,4 +1,4 @@
-// Bash Boyale — PR 1
+// Bash Boyale — PR 2
 // Browser-first Clash Royale-style battler. Stats come from Anthony's
 // handwritten notes (see bash-boyale-transcript.md). Where a note leaves a
 // number out (e.g. an attack speed), the chosen value is marked CHOSEN.
@@ -40,11 +40,11 @@
   function makeEntity(card, side, x, y, isMini, miniDef, parent) {
     var hp = isMini ? miniDef.hp : (card ? card.hp : TOWER.hp);
     return {
-      id: nextId++, cardId: card ? card.id : (isMini ? 'mini' : 'tower'),
+      id: nextId++, cardId: isMini ? ('mini_' + parent) : (card ? card.id : 'tower'),
       name: isMini ? (parent === 'waaflee' ? 'Mini Waffle' : 'Mini Eagle') : (card ? card.name : 'Tower'),
       emoji: card ? card.emoji : '🏰',
       side: side, x: x, y: y, hp: hp, maxHp: hp, shield: 0,
-      atkCd: 0, isBuilding: !!(card && card.type === 'building'), isTower: !card,
+      atkCd: 0, isBuilding: !!(card && card.type === 'building'), isTower: !card, isKing: false,
       isMini: !!isMini, miniDef: miniDef || null, parent: parent || null,
       dead: false, effects: [], shotCount: 0, spawnT: 0, rollT: card && card.rollEvery ? card.rollEvery : 0,
       rollState: null, history: [], splitDone: false, rewindDone: false,
@@ -55,19 +55,47 @@
     };
   }
 
+  function makeTower(side, x, y, isKing) {
+    var t = makeEntity(null, side, x, y, false);
+    t.isKing = !!isKing;
+    if (isKing) t.emoji = '👑';
+    return t;
+  }
+  function allTowers(s) {
+    return s.towers.player.sides.concat([s.towers.player.king], s.towers.ai.sides, [s.towers.ai.king]);
+  }
+  function enemyTowers(s, side) {
+    return side === 'player' ? s.towers.ai.sides.concat([s.towers.ai.king]) : s.towers.player.sides.concat([s.towers.player.king]);
+  }
+  function ownTowers(s, side) {
+    var tw = side === 'player' ? s.towers.player : s.towers.ai;
+    return tw.sides.concat([tw.king]);
+  }
+  function towersAlive(tw) {
+    var n = 0;
+    tw.sides.forEach(function (t) { if (t.hp > 0) n++; });
+    if (tw.king.hp > 0) n++;
+    return n;
+  }
+  function towersHpPct(tw) {
+    var all = tw.sides.concat([tw.king]), hp = 0, max = 0;
+    all.forEach(function (t) { hp += Math.max(0, t.hp); max += t.maxHp; });
+    return max ? hp / max : 0;
+  }
+
   function createBattle(playerDeck, aiDeck) {
     var s = {
       timeLeft: MATCH_TIME, over: false, result: null,
       elixir: { player: ELIXIR_START, ai: ELIXIR_START },
       entities: [], zones: [], tracers: [],
       towers: {
-        player: makeEntity(null, 'player', W / 2, H - 60, false),
-        ai: makeEntity(null, 'ai', W / 2, 60, false)
+        player: { sides: [makeTower('player', 80, 430), makeTower('player', 320, 430)], king: makeTower('player', W / 2, H - 60, true) },
+        ai: { sides: [makeTower('ai', 80, 170), makeTower('ai', 320, 170)], king: makeTower('ai', W / 2, 60, true) }
       },
       hands: {}, decks: { player: playerDeck.slice(), ai: aiDeck.slice() },
       nextIdx: { player: 0, ai: 0 }, aiT: 4, log: []
     };
-    s.entities.push(s.towers.player, s.towers.ai);
+    s.entities.push.apply(s.entities, allTowers(s));
     s.hands.player = drawHand(s, 'player');
     s.hands.ai = drawHand(s, 'ai');
     return s;
@@ -129,7 +157,7 @@
     if (card && card.deathFire) {
       s.zones.push({ x: e.x, y: e.y, r: 1.5 * TILE, t: card.deathFireTime, dmg: card.deathFire, side: e.side });
     }
-    if (card && card.splitAt && !e.splitDone) {
+    if (card && card.splitAt && !e.splitDone && !e.isMini) {
       e.splitDone = true;
       for (var i = 0; i < 2; i++) {
         var m = makeEntity(card, e.side, e.x + (i === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee');
@@ -139,17 +167,24 @@
   }
 
   // Play a card from a hand slot. Returns true on success.
+  // playFailReason is set on failure: 'elixir' | 'half' | 'tower' | 'targets'.
+  var playFailReason = null;
   function playCard(s, side, slot, x, y) {
+    playFailReason = null;
     var card = cardById(s.hands[side][slot]);
     if (!card) return false;
-    if (s.elixir[side] < card.elixir) return false;
+    if (s.elixir[side] < card.elixir) { playFailReason = 'elixir'; return false; }
     var ownHalf = side === 'player' ? (y > BRIDGE_Y + 6) : (y < BRIDGE_Y - 6);
     if (card.type === 'spell') {
       if (card.id === 'firelight_ball') {
-        s.elixir[side] -= card.elixir;
-        var foes = enemiesOf(s, side);
+        var foes = enemiesOf(s, side), hit = 0;
         for (var i = 0; i < foes.length; i++) {
-          var f = foes[i];
+          if (Math.hypot(foes[i].x - x, foes[i].y - y) <= card.radius * TILE) hit++;
+        }
+        if (!hit) { playFailReason = 'targets'; return false; }
+        s.elixir[side] -= card.elixir;
+        for (var j = 0; j < foes.length; j++) {
+          var f = foes[j];
           if (Math.hypot(f.x - x, f.y - y) <= card.radius * TILE) {
             var dmg = f.isTower || f.isBuilding ? card.towerDmg : card.dmg;
             applyDamage(s, f, dmg, side);
@@ -161,23 +196,30 @@
         return true;
       }
       if (card.id === 'portn_shield') {
-        s.elixir[side] -= card.elixir;
         var friends = friendliesOf(s, side);
         var inRadius = [];
-        for (var j = 0; j < friends.length; j++) {
-          if (Math.hypot(friends[j].x - x, friends[j].y - y) <= card.radius * TILE) inRadius.push(friends[j]);
+        for (var k = 0; k < friends.length; k++) {
+          if (Math.hypot(friends[k].x - x, friends[k].y - y) <= card.radius * TILE) inRadius.push(friends[k]);
         }
+        if (!inRadius.length) { playFailReason = 'targets'; return false; }
+        s.elixir[side] -= card.elixir;
         var main = nearest(inRadius, x, y);
-        for (var k = 0; k < inRadius.length; k++) {
-          addEffect(inRadius[k], { kind: 'dr', mult: inRadius[k] === main ? card.drMain : card.drOthers, t: card.drTime });
+        for (var m2 = 0; m2 < inRadius.length; m2++) {
+          addEffect(inRadius[m2], { kind: 'dr', mult: inRadius[m2] === main ? card.drMain : card.drOthers, t: card.drTime });
         }
         s.tracers.push({ x1: x, y1: y, x2: x, y2: y, t: 0.4, color: '#62ef88' });
         cycleHand(s, side, slot);
         return true;
       }
+      playFailReason = 'targets';
       return false;
     }
-    if (!ownHalf) return false;
+    if (!ownHalf) { playFailReason = 'half'; return false; }
+    // Don't stack a troop/building on top of an own tower.
+    var ownTw = ownTowers(s, side);
+    for (var ti = 0; ti < ownTw.length; ti++) {
+      if (Math.hypot(ownTw[ti].x - x, ownTw[ti].y - y) < 34) { playFailReason = 'tower'; return false; }
+    }
     s.elixir[side] -= card.elixir;
     x = clamp(x, 24, W - 24);
     y = clamp(y, side === 'player' ? BRIDGE_Y + 20 : 90, side === 'player' ? H - 90 : BRIDGE_Y - 20);
@@ -203,7 +245,7 @@
     if (card.type === 'spell') {
       if (card.id === 'firelight_ball') {
         var foes = friendliesOf(s, 'player');
-        var target = foes.length ? nearest(foes, W / 2, H - 200) : s.towers.player;
+        var target = foes.length ? nearest(foes, W / 2, H - 200) : s.towers.player.king;
         playCard(s, 'ai', slot, target.x, target.y);
       } else {
         var friends = friendliesOf(s, 'ai');
@@ -237,7 +279,6 @@
       if (s.tracers[ti].t <= 0) s.tracers.splice(ti, 1);
     }
 
-    var towerTarget = { player: s.towers.ai, ai: s.towers.player };
     for (var ei = 0; ei < s.entities.length; ei++) {
       var e = s.entities[ei];
       if (e.dead || e.isTower) continue;
@@ -270,12 +311,12 @@
         }
       }
       // Waaflee split at 25% HP
-      if (card && card.splitAt && !e.splitDone && e.hp <= e.maxHp * card.splitAt) {
+      if (card && card.splitAt && !e.splitDone && !e.isMini && e.hp <= e.maxHp * card.splitAt) {
         e.splitDone = true;
         for (var w = 0; w < 2; w++) s.entities.push(makeEntity(card, e.side, e.x + (w === 0 ? -18 : 18), e.y, true, MINI_WAFFLE, 'waaflee'));
       }
       // Eagle Eye spawns a mini eagle every 3s
-      if (card && card.spawnEvery) {
+      if (card && card.spawnEvery && !e.isMini) {
         e.spawnT += dt;
         if (e.spawnT >= card.spawnEvery) {
           e.spawnT = 0;
@@ -356,16 +397,18 @@
         e.atkCd = e.hitSpeed;
         attack(s, e, tgt, card);
       } else if (!e.isBuilding && !rooted) {
-        var dest = towerTarget[e.side];
+        var dest = nearest(enemyTowers(s, e.side), e.x, e.y);
         // Aggro: chase a nearby enemy instead of marching past it.
         var nearFoe = nearest(foes2, e.x, e.y);
         if (nearFoe && Math.hypot(nearFoe.x - e.x, nearFoe.y - e.y) <= ((e.range || 1) + 2) * TILE) dest = nearFoe;
-        var dx = dest.x - e.x, dy = dest.y - e.y;
-        var d = Math.hypot(dx, dy);
-        if (d > (e.range || 1) * TILE) {
-          var sp = SPEEDS[e.speed] || 65;
-          e.x += dx / d * sp * dt;
-          e.y += dy / d * sp * dt;
+        if (dest) {
+          var dx = dest.x - e.x, dy = dest.y - e.y;
+          var d = Math.hypot(dx, dy);
+          if (d > (e.range || 1) * TILE) {
+            var sp = SPEEDS[e.speed] || 65;
+            e.x += dx / d * sp * dt;
+            e.y += dy / d * sp * dt;
+          }
         }
       }
       // Separation: don't stack units
@@ -379,8 +422,8 @@
       e.x = clamp(e.x, 20, W - 20); e.y = clamp(e.y, 30, H - 30);
     }
 
-    // Towers shoot
-    [s.towers.player, s.towers.ai].forEach(function (t) {
+    // Towers shoot (all six)
+    allTowers(s).forEach(function (t) {
       if (t.dead) return;
       t.atkCd -= dt;
       if (t.atkCd > 0) return;
@@ -395,15 +438,21 @@
       }
     });
 
-    // Cleanup + win check
+    // Cleanup + win check (CR-style: king tower destroyed = instant win)
     s.entities = s.entities.filter(function (e) { return !e.dead || e.isTower; });
-    if (s.towers.ai.hp <= 0 || s.towers.player.hp <= 0) {
+    var pk = s.towers.player.king, ak = s.towers.ai.king;
+    if (ak.hp <= 0 || pk.hp <= 0) {
       s.over = true;
-      s.result = s.towers.ai.hp <= 0 && s.towers.player.hp > 0 ? 'win' : (s.towers.player.hp <= 0 && s.towers.ai.hp > 0 ? 'lose' : 'draw');
+      s.result = ak.hp <= 0 && pk.hp > 0 ? 'win' : (pk.hp <= 0 && ak.hp > 0 ? 'lose' : 'draw');
     } else if (s.timeLeft <= 0) {
       s.over = true;
-      var pPct = s.towers.player.hp / s.towers.player.maxHp, aPct = s.towers.ai.hp / s.towers.ai.maxHp;
-      s.result = aPct < pPct ? 'win' : (pPct < aPct ? 'lose' : 'draw');
+      var pDown = 3 - towersAlive(s.towers.player), aDown = 3 - towersAlive(s.towers.ai);
+      if (aDown > pDown) s.result = 'win';
+      else if (pDown > aDown) s.result = 'lose';
+      else {
+        var pPct = towersHpPct(s.towers.player), aPct = towersHpPct(s.towers.ai);
+        s.result = aPct < pPct ? 'win' : (pPct < aPct ? 'lose' : 'draw');
+      }
     }
   }
 
@@ -474,10 +523,10 @@
     for (var ei = 0; ei < s.entities.length; ei++) {
       var e = s.entities[ei];
       if (e.dead) continue;
-      var r = e.isTower ? 26 : (e.isBuilding ? 20 : 13);
+      var r = e.isTower ? (e.isKing ? 30 : 24) : (e.isBuilding ? 20 : 13);
       ctx.fillStyle = e.side === 'player' ? '#2563eb' : '#dc2626';
       ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
-      ctx.font = (e.isTower ? 24 : 18) + 'px sans-serif';
+      ctx.font = (e.isTower ? (e.isKing ? 26 : 22) : 18) + 'px sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(e.emoji, e.x, e.y);
       if (e.shield > 0) {
@@ -520,7 +569,7 @@
 
   // Expose core for headless smoke tests (node).
   if (typeof globalThis !== 'undefined') {
-    globalThis.BashBoyale = { CARDS: CARDS, cardById: cardById, createBattle: createBattle, update: update, playCard: playCard, chestReward: chestReward, makeEntity: makeEntity, applyDamage: applyDamage, DEFAULT_DECK: DEFAULT_DECK, AI_DECK: AI_DECK };
+    globalThis.BashBoyale = { CARDS: CARDS, cardById: cardById, createBattle: createBattle, update: update, playCard: playCard, chestReward: chestReward, makeEntity: makeEntity, applyDamage: applyDamage, DEFAULT_DECK: DEFAULT_DECK, AI_DECK: AI_DECK, getPlayFailReason: function () { return playFailReason; } };
   }
 
   // ---------- Browser UI ----------
@@ -531,8 +580,9 @@
   }
   function getDeck() {
     var d = storeGet('bb_deck', null);
-    if (!d || d.length !== 8) return DEFAULT_DECK.slice();
-    return d;
+    if (!Array.isArray(d)) return DEFAULT_DECK.slice();
+    var clean = d.filter(function (id) { return !!cardById(id); });
+    return clean.length ? clean : DEFAULT_DECK.slice();
   }
   function getChests() { return storeGet('bb_chests', []); }
   function getCrystals() { return storeGet('bb_crystals', 0); }
@@ -563,7 +613,7 @@
         var ix = d.indexOf(id);
         if (ix >= 0) d.splice(ix, 1);
         else if (d.length < 8) d.push(id);
-        else return;
+        else { $('deck-status').textContent = 'Deck full — remove a card first'; return; }
         storeSet('bb_deck', d);
         renderDeckScreen();
       };
@@ -596,6 +646,8 @@
     var m = Math.floor(sec / 60), s = Math.floor(sec % 60);
     return m + ':' + (s < 10 ? '0' : '') + s;
   }
+  // Rebuilds the hand cards. Called ONLY when the hand changes (battle start,
+  // card played, selection changed) — never every frame, or taps die mid-click.
   function renderHand() {
     if (!battle) return;
     $('hand').innerHTML = battle.hands.player.map(function (id, i) {
@@ -606,14 +658,26 @@
     $('hand').querySelectorAll('.card').forEach(function (el) {
       el.onclick = function () { selectedSlot = parseInt(el.getAttribute('data-i'), 10); renderHand(); };
     });
+    updateHud();
+  }
+  // Cheap per-frame HUD refresh: never touches the hand nodes themselves.
+  function updateHud() {
+    if (!battle) return;
     var deck = battle.decks.player;
     var nextId = deck[battle.nextIdx.player % deck.length];
     $('next-card').textContent = cardById(nextId).emoji + ' ' + cardById(nextId).name;
     $('elixir-fill').style.width = (battle.elixir.player / ELIXIR_MAX * 100) + '%';
     $('elixir-text').textContent = Math.floor(battle.elixir.player) + ' / ' + ELIXIR_MAX;
-    $('ai-tower-hp').style.width = Math.max(0, battle.towers.ai.hp / battle.towers.ai.maxHp * 100) + '%';
-    $('player-tower-hp').style.width = Math.max(0, battle.towers.player.hp / battle.towers.player.maxHp * 100) + '%';
+    $('ai-elixir-text').textContent = 'AI: ' + Math.floor(battle.elixir.ai) + ' / ' + ELIXIR_MAX;
+    $('ai-tower-hp').style.width = Math.max(0, battle.towers.ai.king.hp / battle.towers.ai.king.maxHp * 100) + '%';
+    $('player-tower-hp').style.width = Math.max(0, battle.towers.player.king.hp / battle.towers.player.king.maxHp * 100) + '%';
+    $('ai-towers-left').textContent = towersAlive(battle.towers.ai) + '/3 🏰';
+    $('player-towers-left').textContent = towersAlive(battle.towers.player) + '/3 🏰';
     $('timer').textContent = fmtTime(Math.max(0, battle.timeLeft));
+    $('hand').querySelectorAll('.card').forEach(function (el) {
+      var c = cardById(battle.hands.player[parseInt(el.getAttribute('data-i'), 10)]);
+      el.classList.toggle('cant-afford', !!c && battle.elixir.player < c.elixir);
+    });
   }
   function battleLoop(ts) {
     if (!battle) return;
@@ -622,14 +686,14 @@
     update(battle, dt);
     var ctx = $('arena').getContext('2d');
     drawBattle(ctx, battle);
-    renderHand();
+    updateHud();
     if (battle.over) { endBattle(); return; }
     raf = requestAnimationFrame(battleLoop);
   }
   function endBattle() {
     cancelAnimationFrame(raf);
     var title = battle.result === 'win' ? '🏆 YOU WIN!' : (battle.result === 'lose' ? '💀 You lose' : '🤝 Draw');
-    var sub = 'AI tower ' + Math.max(0, Math.round(battle.towers.ai.hp)) + ' HP · Your tower ' + Math.max(0, Math.round(battle.towers.player.hp)) + ' HP';
+    var sub = 'AI towers down ' + (3 - towersAlive(battle.towers.ai)) + '/3 · Your towers down ' + (3 - towersAlive(battle.towers.player)) + '/3 · King HP: AI ' + Math.max(0, Math.round(battle.towers.ai.king.hp)) + ' / You ' + Math.max(0, Math.round(battle.towers.player.king.hp));
     if (battle.result === 'win') {
       var chests = getChests();
       if (chests.length < 4) { chests.push(rollChestTier()); storeSet('bb_chests', chests); sub += ' · 📦 You earned a chest!'; }
@@ -646,6 +710,7 @@
     $('battle-msg').textContent = 'Pick a card, then tap your side of the arena!';
     show('screen-battle');
     lastT = performance.now();
+    renderHand();
     raf = requestAnimationFrame(battleLoop);
   }
 
@@ -661,7 +726,8 @@
   $('btn-battle-home').onclick = function () { battle = null; cancelAnimationFrame(raf); show('screen-home'); refreshHome(); };
   $('btn-quit').onclick = function () { battle = null; cancelAnimationFrame(raf); show('screen-home'); refreshHome(); };
   $('arena').addEventListener('click', function (ev) {
-    if (!battle || battle.over || selectedSlot < 0) return;
+    if (!battle || battle.over) return;
+    if (selectedSlot < 0) { $('battle-msg').textContent = 'Pick a card first!'; return; }
     var rect = $('arena').getBoundingClientRect();
     var x = (ev.clientX - rect.left) / rect.width * W;
     var y = (ev.clientY - rect.top) / rect.height * H;
@@ -670,6 +736,12 @@
     if (playCard(battle, 'player', selectedSlot, x, y)) {
       $('battle-msg').textContent = card.emoji + ' ' + card.name + ' played!';
       selectedSlot = -1;
+    } else if (playFailReason === 'targets') {
+      $('battle-msg').textContent = 'No targets there!';
+    } else if (playFailReason === 'tower') {
+      $('battle-msg').textContent = 'Too close to your tower!';
+    } else if (playFailReason === 'half') {
+      $('battle-msg').textContent = 'Troops and buildings go on YOUR half (below the river)!';
     } else {
       $('battle-msg').textContent = 'Not enough elixir for ' + card.name + '!';
     }
@@ -678,4 +750,14 @@
 
   show('screen-home');
   refreshHome();
+
+  // Test seams for the PR 2 regression test (harmless extra global in browsers).
+  if (typeof globalThis !== 'undefined') {
+    globalThis.BashBoyaleUI = {
+      getDeck: getDeck, renderDeckScreen: renderDeckScreen, renderHand: renderHand,
+      updateHud: updateHud, startBattle: startBattle,
+      getSelectedSlot: function () { return selectedSlot; },
+      getBattle: function () { return battle; }
+    };
+  }
 })();

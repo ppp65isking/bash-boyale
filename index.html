@@ -17,7 +17,7 @@
       <button id="btn-deck" class="btn">🃏 Deck Builder</button>
       <button id="btn-chests" class="btn">📦 Chests <span id="chest-count"></span></button>
     </div>
-    <p class="foot">PR 1 — 15 cards · Home · Arena · AI opponent · Deck builder · Chests</p>
+    <p class="foot">PR 2 — 15 cards · 3 towers · Home · Arena · AI opponent · Deck builder · Chests</p>
     <p class="foot" id="collection-summary"></p>
   </section>
 
@@ -44,9 +44,9 @@
   <!-- BATTLE -->
   <section id="screen-battle" class="screen hidden">
     <div class="battle-top">
-      <div class="towerbar"><span>🤖 AI Tower</span><div class="hpbar"><div id="ai-tower-hp" class="hpfill"></div></div></div>
+      <div class="towerbar"><span>🤖 AI King</span> <span id="ai-towers-left"></span><div class="hpbar"><div id="ai-tower-hp" class="hpfill"></div></div></div>
       <div id="timer" class="timer">2:00</div>
-      <div class="towerbar"><span>😀 Your Tower</span><div class="hpbar"><div id="player-tower-hp" class="hpfill good"></div></div></div>
+      <div class="towerbar"><span>😀 Your King</span> <span id="player-towers-left"></span><div class="hpbar"><div id="player-tower-hp" class="hpfill good"></div></div></div>
     </div>
     <canvas id="arena" width="400" height="600"></canvas>
     <div id="battle-msg" class="battle-msg">Pick a card, then tap your side of the arena!</div>
