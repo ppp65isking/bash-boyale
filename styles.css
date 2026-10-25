@@ -17,7 +17,8 @@ h2 { color: #ffd34f; }
 .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .deck-slots { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .card { background: linear-gradient(160deg, #352a63, #2a2150); border-radius: 14px; padding: 10px 6px; text-align: center; cursor: pointer; border: 3px solid #4a3f7a; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.card .emoji { font-size: 26px; }
+.card .icon { width: 48px; height: 48px; display: block; margin: 0 auto; }
+.deck-slots .icon { width: 40px; height: 40px; }
 .card .name { font-size: 12px; font-weight: bold; }
 .card .cost { color: #ff9ff3; font-size: 13px; }
 .card.in-deck { border-color: #ffd34f; background: #3d2f6b; }
